@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A PC component or laptop in the store catalog.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "category": { "type": "string", "description": "Product category (cpu, gpu, etc.)" },
+        "brand": { "type": "string", "description": "Product brand" },
+        "price": { "type": "number", "description": "Current price" },
+        "oldPrice": { "type": "number", "description": "Original price if on sale" },
+        "img": { "type": "string", "description": "Image URL" },
+        "icon": { "type": "string", "description": "Emoji icon" },
+        "specs": { "type": "array", "items": { "type": "string" }, "description": "Technical specifications" },
+        "socket": { "type": "string", "description": "CPU socket type" },
+        "ramType": { "type": "string", "description": "RAM type (DDR4, DDR5)" },
+        "watts": { "type": "number", "description": "Power consumption" },
+        "stock": { "type": "number", "description": "Inventory count" },
+        "perf": {
+          "type": "object",
+          "properties": {
+            "gaming": { "type": "number" },
+            "office": { "type": "number" },
+            "editing": { "type": "number" }
+          }
+        }
+      },
+      "required": ["name", "category", "brand", "price", "stock"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order.",
+      "type": "object",
+      "properties": {
+        "customer": { "type": "string" },
+        "email": { "type": "string" },
+        "items": { "type": "number" },
+        "total": { "type": "number" },
+        "payment": { "type": "string" },
+        "status": { "type": "string", "enum": ["Processing", "Shipped", "Delivered", "Cancelled"] },
+        "date": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string", "description": "Auth UID of the customer" },
+        "cartItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "qty": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "required": ["customer", "email", "items", "total", "status", "date", "uid", "cartItems"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A registered user profile.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "client"] },
+        "joined": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store products"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    }
+  }
+}
