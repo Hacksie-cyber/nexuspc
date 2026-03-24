@@ -65,7 +65,7 @@ interface Order {
   items: number;
   total: number;
   payment: string;
-  status: 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  status: 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled' | 'Refund Requested' | 'Return & Rejected';
   date: string;
   cartItems?: { id: number; name: string; price: number; qty: number }[];
 }
@@ -927,7 +927,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                                     onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
                                     className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-green-500"
                                   >
-                                    {['Processing', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
+                                    {['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refund Requested', 'Return & Rejected'].map(s => (
                                       <option key={s} value={s}>{s}</option>
                                     ))}
                                   </select>
@@ -1322,15 +1322,17 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 function StatusBadge({ status }: { status: Order['status'] }) {
-  const styles = {
+  const styles: Record<string, string> = {
     Processing: 'bg-orange-50 text-orange-600 border-orange-100',
     Shipped: 'bg-blue-50 text-blue-600 border-blue-100',
     Delivered: 'bg-green-50 text-green-600 border-green-100',
-    Cancelled: 'bg-red-50 text-red-600 border-red-100'
+    Cancelled: 'bg-red-50 text-red-600 border-red-100',
+    'Refund Requested': 'bg-yellow-50 text-yellow-700 border-yellow-100',
+    'Return & Rejected': 'bg-gray-100 text-gray-600 border-gray-200',
   };
 
   return (
-    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${styles[status]}`}>
+    <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${styles[status] || 'bg-gray-100 text-gray-500 border-gray-200'}`}>
       {status}
     </span>
   );
