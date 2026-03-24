@@ -132,6 +132,7 @@ export default function App() {
   const [builderStep, setBuilderStep] = useState(0);
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'GCash' | 'Cash on Delivery' | 'Bank Transfer'>('GCash');
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
@@ -264,7 +265,7 @@ export default function App() {
       email: user.email || '',
       items: cart.length,
       total: cartTotal,
-      payment: 'GCash', // Default for demo
+      payment: paymentMethod,
       status: 'Processing',
       date: new Date().toISOString(),
       createdAt: serverTimestamp(),
@@ -646,6 +647,38 @@ export default function App() {
                   <div className="flex justify-between items-center mb-6">
                     <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
                     <span className="text-2xl font-bold text-red-600">₱{cartTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="mb-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { id: 'GCash', label: 'GCash', icon: '📱' },
+                        { id: 'Cash on Delivery', label: 'Cash on Delivery', icon: '🚚' },
+                        { id: 'Bank Transfer', label: 'Bank Transfer', icon: '🏦' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setPaymentMethod(opt.id)}
+                          className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${
+                            paymentMethod === opt.id
+                              ? 'border-green-500 bg-green-50 text-green-700'
+                              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-xl">{opt.icon}</span>
+                          <span className="text-[10px] font-bold leading-tight">{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {paymentMethod === 'GCash' && (
+                      <p className="text-[10px] text-gray-400 mt-2 pl-1">You'll receive a GCash payment request after checkout.</p>
+                    )}
+                    {paymentMethod === 'Cash on Delivery' && (
+                      <p className="text-[10px] text-gray-400 mt-2 pl-1">Pay when your order arrives at your door.</p>
+                    )}
+                    {paymentMethod === 'Bank Transfer' && (
+                      <p className="text-[10px] text-gray-400 mt-2 pl-1">Bank details will be sent to your email after checkout.</p>
+                    )}
                   </div>
                   <button 
                     onClick={handleCheckout}
