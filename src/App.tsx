@@ -47,7 +47,8 @@ import {
   setDoc,
   doc,
   serverTimestamp,
-  where 
+  where,
+  updateDoc
 } from 'firebase/firestore';
 import PCVisualizer from './components/builder/PCVisualizer';
 
@@ -1211,6 +1212,8 @@ function ContactPage() {
 
 function ProfilePage({ user, orders, navigate, logout }: { user: User | null, orders: any[], navigate: (p: string) => void, logout: () => void }) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' } | null>(null);
 
   if (!user) {
     return (
@@ -1223,12 +1226,111 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
 
   const fmt = (n: number) => '₱' + n.toLocaleString();
 
+  const handleOrderAction = async (orderId: string, type: 'cancel' | 'refund' | 'reject') => {
+    setActionLoading(orderId + type);
+    const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected' };
+    try {
+      await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type], updatedAt: serverTimestamp() });
+    } catch (err) {
+      console.error('Failed to update order:', err);
+    } finally {
+      setActionLoading(null);
+      setConfirmAction(null);
+    }
+  };
+
+  const statusStyle: Record<string, string> = {
+    Delivered: 'bg-green-100 text-green-600',
+    Shipped: 'bg-blue-100 text-blue-600',
+    Cancelled: 'bg-red-100 text-red-600',
+    Processing: 'bg-orange-100 text-orange-600',
+    'Refund Requested': 'bg-yellow-100 text-yellow-700',
+    'Return & Rejected': 'bg-gray-100 text-gray-600',
+  };
+
+  const getOrderActions = (order: any) => {
+    switch (order.status) {
+      case 'Processing':
+        return (
+          <button
+            onClick={() => setConfirmAction({ orderId: order.id, type: 'cancel' })}
+            className="text-[10px] font-bold uppercase tracking-widest text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all"
+          >
+            Cancel Order
+          </button>
+        );
+      case 'Shipped':
+        return (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setConfirmAction({ orderId: order.id, type: 'refund' })}
+              className="text-[10px] font-bold uppercase tracking-widest text-orange-500 border border-orange-200 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-all"
+            >
+              Request Refund
+            </button>
+            <button
+              onClick={() => setConfirmAction({ orderId: order.id, type: 'reject' })}
+              className="text-[10px] font-bold uppercase tracking-widest text-gray-500 border border-gray-200 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-all"
+            >
+              Reject Delivery
+            </button>
+          </div>
+        );
+      case 'Refund Requested':
+        return <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-lg">Awaiting Refund Review</span>;
+      case 'Return & Rejected':
+        return <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">Return Being Processed</span>;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto px-4 py-12"
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto px-4 py-12">
+
+      {/* Confirm Action Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setConfirmAction(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 16 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 ${confirmAction.type === 'cancel' ? 'bg-red-100' : confirmAction.type === 'refund' ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                <X className={`w-7 h-7 ${confirmAction.type === 'cancel' ? 'text-red-500' : confirmAction.type === 'refund' ? 'text-orange-500' : 'text-gray-500'}`} />
+              </div>
+              <h3 className="text-lg font-black text-center tracking-tight mb-2">
+                {confirmAction.type === 'cancel' && 'Cancel this order?'}
+                {confirmAction.type === 'refund' && 'Request a refund?'}
+                {confirmAction.type === 'reject' && 'Reject delivery?'}
+              </h3>
+              <p className="text-sm text-gray-400 text-center mb-7 leading-relaxed">
+                {confirmAction.type === 'cancel' && 'This will cancel your order. This action cannot be undone.'}
+                {confirmAction.type === 'refund' && "A refund request will be sent to our team for review. We'll get back to you within 1–3 business days."}
+                {confirmAction.type === 'reject' && "You're refusing delivery of this shipment. Our team will process your return and contact you shortly."}
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmAction(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">
+                  Go Back
+                </button>
+                <button
+                  disabled={!!actionLoading}
+                  onClick={() => handleOrderAction(confirmAction.orderId, confirmAction.type)}
+                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 ${confirmAction.type === 'cancel' ? 'bg-red-500 hover:bg-red-600' : confirmAction.type === 'refund' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-gray-700 hover:bg-gray-800'}`}
+                >
+                  {actionLoading ? 'Processing...' : 'Confirm'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-xl">
         <div className="h-32 bg-gradient-to-r from-green-600 to-green-400"></div>
         <div className="px-8 pb-8">
@@ -1242,10 +1344,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                 </div>
               )}
             </div>
-            <button 
-              onClick={logout}
-              className="px-6 py-2 bg-red-50 text-red-600 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-100 transition-all mb-4"
-            >
+            <button onClick={logout} className="px-6 py-2 bg-red-50 text-red-600 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-100 transition-all mb-4">
               Logout
             </button>
           </div>
@@ -1259,10 +1358,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Account Status</div>
-                <div className="text-sm font-bold text-green-600 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  Verified Member
-                </div>
+                <div className="text-sm font-bold text-green-600 flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>Verified Member</div>
               </div>
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Member Since</div>
@@ -1280,52 +1376,38 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                 <div className="text-center py-12 text-gray-400">
                   <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-20" />
                   <p className="text-sm">No recent orders found.</p>
-                  <button 
-                    onClick={() => navigate('shop')}
-                    className="mt-4 text-green-600 font-bold text-sm hover:underline"
-                  >
-                    Start Shopping
-                  </button>
+                  <button onClick={() => navigate('shop')} className="mt-4 text-green-600 font-bold text-sm hover:underline">Start Shopping</button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {orders.map((order) => (
                     <div key={order.id} className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
-                      <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-1">
+                      <div className="p-6 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1 flex-wrap">
                             <span className="font-mono text-sm font-bold text-green-600">{order.id}</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              order.status === 'Delivered' ? 'bg-green-100 text-green-600' :
-                              order.status === 'Shipped' ? 'bg-blue-100 text-blue-600' :
-                              order.status === 'Cancelled' ? 'bg-red-100 text-red-600' :
-                              'bg-orange-100 text-orange-600'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${statusStyle[order.status] || 'bg-gray-100 text-gray-600'}`}>
                               {order.status}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-400">{new Date(order.date).toLocaleDateString()} • {order.items} items</div>
+                          <div className="text-xs text-gray-400 mb-3">{new Date(order.date).toLocaleDateString()} • {order.items} items</div>
+                          {getOrderActions(order)}
                         </div>
-                        <div className="flex items-center justify-between md:justify-end gap-6">
+                        <div className="flex items-center justify-between md:justify-end gap-6 shrink-0">
                           <div className="text-right">
                             <div className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Total Amount</div>
                             <div className="text-lg font-bold text-gray-900">{fmt(order.total)}</div>
                           </div>
-                          <button 
-                            onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
-                            className="p-2 hover:bg-gray-200 rounded-lg transition-all"
-                          >
+                          <button onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)} className="p-2 hover:bg-gray-200 rounded-lg transition-all">
                             <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${selectedOrder?.id === order.id ? 'rotate-90' : ''}`} />
                           </button>
                         </div>
                       </div>
-                      
+
                       <AnimatePresence>
                         {selectedOrder?.id === order.id && (
-                          <motion.div 
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                             className="border-t border-gray-200 bg-white p-6"
                           >
                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">Order Items</h4>
@@ -1340,10 +1422,36 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                                 </div>
                               ))}
                             </div>
-                            <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
-                              <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Payment Method</span>
-                              <span className="text-sm font-bold">{order.payment}</span>
+                            <div className="mt-6 pt-4 border-t border-dashed grid grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-xs font-bold uppercase tracking-widest text-gray-400 block mb-1">Payment Method</span>
+                                <span className="text-sm font-bold">{order.payment}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold uppercase tracking-widest text-gray-400 block mb-1">Order Status</span>
+                                <span className={`text-xs font-bold px-2 py-1 rounded ${statusStyle[order.status] || 'bg-gray-100 text-gray-600'}`}>{order.status}</span>
+                              </div>
                             </div>
+                            {order.status === 'Shipped' && (
+                              <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-600 leading-relaxed">
+                                <strong>Your order is on the way.</strong> You may request a refund or reject the delivery if needed.
+                              </div>
+                            )}
+                            {order.status === 'Delivered' && (
+                              <div className="mt-4 p-3 bg-green-50 border border-green-100 rounded-xl text-xs text-green-600 leading-relaxed">
+                                <strong>Order delivered.</strong> Thank you for shopping with NEXUS PC!
+                              </div>
+                            )}
+                            {order.status === 'Refund Requested' && (
+                              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700 leading-relaxed">
+                                <strong>Refund under review.</strong> Our team will process this within 1–3 business days.
+                              </div>
+                            )}
+                            {order.status === 'Return & Rejected' && (
+                              <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-600 leading-relaxed">
+                                <strong>Return being processed.</strong> We'll contact you once the return is confirmed.
+                              </div>
+                            )}
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -1358,6 +1466,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
     </motion.div>
   );
 }
+
 
 function ProductCard({ product, addToCart, onView }: { product: Product, addToCart: (p: Product) => void, onView: (p: Product) => void, key?: any }) {
   return (
