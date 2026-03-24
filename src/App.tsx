@@ -1333,10 +1333,14 @@ function ProductCard({ product, addToCart }: { product: Product, addToCart: (p: 
       
       <div className="flex-1 flex flex-col">
         <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">{product.category}</div>
-        <h3 className="font-bold text-sm leading-tight mb-3 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+        <h3 className="font-bold text-sm leading-tight mb-1 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+
+        {product.description && (
+          <p className="text-[11px] text-gray-500 leading-relaxed mb-2 line-clamp-2">{product.description}</p>
+        )}
         
         <ul className="space-y-1 mb-4">
-          {product.specs.slice(0, 3).map((s, i) => (
+          {product.specs.map((s, i) => (
             <li key={i} className="text-[10px] text-gray-500 flex items-center gap-2">
               <span className="w-1 h-1 bg-green-500 rounded-full"></span>
               {s}
