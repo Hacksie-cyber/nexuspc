@@ -769,7 +769,7 @@ function HomePage({ navigate, addToCart, products }: { navigate: (p: string) => 
         <div className="absolute top-0 right-0 w-1/2 h-full opacity-20 pointer-events-none">
           <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
-        <div className="max-w-7xl mx-auto px-4 relative z-10">
+        <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 relative z-10">
           <div className="max-w-2xl">
             <h2 className="text-5xl font-bold text-white tracking-tighter mb-8">Expert <span className="text-green-500">PC Services</span></h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-12">
