@@ -42,7 +42,6 @@ import {
   collection, 
   onSnapshot, 
   query, 
-  orderBy, 
   addDoc, 
   setDoc,
   doc,
@@ -164,9 +163,11 @@ export default function App() {
 
   // Products Listener
   useEffect(() => {
-    const q = query(collection(db, 'products'), orderBy('name'));
+    const q = query(collection(db, 'products'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pData = snapshot.docs.map(doc => ({ id: Number(doc.id), ...doc.data() } as Product));
+      const pData = snapshot.docs
+        .map(doc => ({ id: Number(doc.id), ...doc.data() } as Product))
+        .sort((a, b) => a.name.localeCompare(b.name));
       setProducts(pData);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'products'));
     return unsubscribe;
