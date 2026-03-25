@@ -719,9 +719,11 @@ export default function App() {
 // --- Page Components ---
 
 function HomePage({ navigate, addToCart, products, onView }: { navigate: (p: string) => void, addToCart: (p: Product) => void, products: Product[], onView: (p: Product) => void }) {
-  // Use products from database that have an oldPrice (deals) or just the first 4
-  const featured = products.filter(p => p.oldPrice).length > 0 
-    ? products.filter(p => p.oldPrice).slice(0, 4)
+  // Show sale items first, then fill remaining slots with newest products across all categories
+  const saleItems = products.filter(p => p.oldPrice).slice(0, 4);
+  const nonSaleItems = products.filter(p => !p.oldPrice).slice(0, 4 - saleItems.length);
+  const featured = saleItems.length > 0
+    ? [...saleItems, ...nonSaleItems].slice(0, 4)
     : products.slice(0, 4);
 
   return (
@@ -1231,7 +1233,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
     setActionLoading(orderId + type);
     const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected' };
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type], updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type] });
     } catch (err) {
       console.error('Failed to update order:', err);
     } finally {
