@@ -34,4 +34,5 @@ export const CATEGORIES = [
   { id: 'case', label: 'PC Cases', icon: '🖥️' },
   { id: 'drone', label: 'Drones', icon: '🚁' },
   { id: 'chair', label: 'Chairs', icon: '🪑' },
+  { id: 'monitor', label: 'Monitors', icon: '🖥️' },
 ];
