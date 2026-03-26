@@ -1003,44 +1003,105 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
   const options = products.filter(p => p.category === currentStepId);
 
   // ── Compatibility Engine ─────────────────────────────────────────
-  const getCompatibilityIssues = (testBuild: BuildState): { part: string; message: string }[] => {
-    const issues: { part: string; message: string }[] = [];
+  const getCompatibilityIssues = (testBuild: BuildState): { part: string; message: string; severity: 'error' | 'warning' }[] => {
+    const issues: { part: string; message: string; severity: 'error' | 'warning' }[] = [];
     const cpu = testBuild['cpu'] as Product | null;
     const motherboard = testBuild['motherboard'] as Product | null;
     const ram = testBuild['ram'] as Product | null;
     const gpu = testBuild['gpu'] as Product | null;
     const psu = testBuild['psu'] as Product | null;
+    const pcCase = testBuild['case'] as Product | null;
 
-    // CPU ↔ Motherboard socket check
+    // Missing critical components warnings
+    const selectedCount = Object.values(testBuild).filter(v => v !== null).length;
+    if (selectedCount > 0) {
+      if (!cpu) issues.push({ part: 'CPU', message: 'No processor selected — a CPU is required for every build.', severity: 'warning' });
+      if (!motherboard) issues.push({ part: 'Motherboard', message: 'No motherboard selected — required to connect all components.', severity: 'warning' });
+      if (!ram) issues.push({ part: 'RAM', message: 'No memory selected — your build needs RAM to function.', severity: 'warning' });
+      if (!psu) issues.push({ part: 'PSU', message: 'No power supply selected — required to power all components.', severity: 'warning' });
+      if (!pcCase) issues.push({ part: 'Case', message: 'No case selected — needed to house your components.', severity: 'warning' });
+    }
+
+    // CPU <-> Motherboard socket check
     if (cpu && motherboard && cpu.socket && motherboard.socket) {
       if (cpu.socket !== motherboard.socket) {
         issues.push({
           part: 'CPU / Motherboard',
-          message: `Socket mismatch — CPU uses ${cpu.socket} but motherboard supports ${motherboard.socket}.`,
+          message: `Socket mismatch — CPU uses ${cpu.socket} but motherboard only supports ${motherboard.socket}. These are physically incompatible.`,
+          severity: 'error',
         });
       }
     }
 
-    // Motherboard ↔ RAM type check
+    // Motherboard <-> RAM type check
     if (motherboard && ram && motherboard.ramType && ram.ramType) {
       if (motherboard.ramType !== ram.ramType) {
         issues.push({
           part: 'Motherboard / RAM',
-          message: `RAM type mismatch — motherboard supports ${motherboard.ramType} but selected RAM is ${ram.ramType}.`,
+          message: `RAM type mismatch — motherboard supports ${motherboard.ramType} but selected RAM is ${ram.ramType}. The RAM will not physically fit.`,
+          severity: 'error',
         });
       }
     }
 
-    // PSU wattage check — sum watts of cpu + gpu + 100W baseline for rest
+    // CPU <-> RAM type cross-check
+    if (cpu && ram && (cpu as any).ramType && ram.ramType) {
+      if ((cpu as any).ramType !== ram.ramType) {
+        issues.push({
+          part: 'CPU / RAM',
+          message: `CPU supports ${(cpu as any).ramType} but selected RAM is ${ram.ramType}. Ensure your platform supports this memory type.`,
+          severity: 'error',
+        });
+      }
+    }
+
+    // PSU wattage check
     if (psu && psu.watts) {
       const cpuWatts = cpu?.watts || 0;
       const gpuWatts = gpu?.watts || 0;
-      const baselineWatts = 100; // mobo + ram + storage + fans
+      const baselineWatts = 100;
       const totalRequired = cpuWatts + gpuWatts + baselineWatts;
+      const recommended = Math.ceil((totalRequired * 1.2) / 50) * 50;
       if (totalRequired > psu.watts) {
         issues.push({
           part: 'PSU',
-          message: `Insufficient power — build needs ~${totalRequired}W but PSU is only ${psu.watts}W.`,
+          message: `Insufficient power — build needs ~${totalRequired}W but PSU is only ${psu.watts}W. Risk of instability. Recommended: at least ${recommended}W.`,
+          severity: 'error',
+        });
+      } else if (psu.watts < recommended) {
+        issues.push({
+          part: 'PSU',
+          message: `PSU has minimal headroom — build needs ~${totalRequired}W and PSU is ${psu.watts}W. Consider upgrading to ${recommended}W for stability.`,
+          severity: 'warning',
+        });
+      }
+    }
+
+    // Case <-> Motherboard form factor check
+    if (pcCase && motherboard && (pcCase as any).formFactor && (motherboard as any).formFactor) {
+      const caseForm = (pcCase as any).formFactor.toLowerCase();
+      const moboForm = (motherboard as any).formFactor.toLowerCase();
+      const fits =
+        (caseForm.includes('atx') && !caseForm.includes('m') && !caseForm.includes('mini')) ||
+        (caseForm.includes('matx') && (moboForm.includes('matx') || moboForm.includes('itx'))) ||
+        (caseForm.includes('itx') && moboForm.includes('itx')) ||
+        caseForm === moboForm;
+      if (!fits) {
+        issues.push({
+          part: 'Case / Motherboard',
+          message: `Form factor mismatch — case supports ${(pcCase as any).formFactor} but motherboard is ${(motherboard as any).formFactor}. The motherboard may not fit.`,
+          severity: 'error',
+        });
+      }
+    }
+
+    // Case <-> PSU form factor check
+    if (pcCase && psu && (pcCase as any).psuType && (psu as any).psuType) {
+      if ((pcCase as any).psuType.toLowerCase() !== (psu as any).psuType.toLowerCase()) {
+        issues.push({
+          part: 'Case / PSU',
+          message: `PSU form factor mismatch — case expects a ${(pcCase as any).psuType} PSU but selected PSU is ${(psu as any).psuType}. The PSU may not mount correctly.`,
+          severity: 'error',
         });
       }
     }
@@ -1102,16 +1163,27 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2"
+              className="rounded-xl overflow-hidden border divide-y divide-gray-200 shadow-sm"
             >
-              <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0" />
-                <span className="text-xs font-black uppercase tracking-widest text-yellow-700">Compatibility Issues Detected</span>
+              {/* Header */}
+              <div className={`flex items-center gap-2 px-4 py-3 ${compatibilityIssues.some(i => i.severity === 'error') ? 'bg-red-600' : 'bg-yellow-500'}`}>
+                <AlertTriangle className="w-4 h-4 text-white shrink-0" />
+                <span className="text-xs font-black uppercase tracking-widest text-white">
+                  {compatibilityIssues.filter(i => i.severity === 'error').length > 0
+                    ? `${compatibilityIssues.filter(i => i.severity === 'error').length} Compatibility Error${compatibilityIssues.filter(i => i.severity === 'error').length > 1 ? 's' : ''} Detected`
+                    : `${compatibilityIssues.length} Warning${compatibilityIssues.length > 1 ? 's' : ''}`}
+                </span>
               </div>
+              {/* Issues list */}
               {compatibilityIssues.map((issue, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-yellow-800 leading-relaxed">
-                  <span className="font-bold shrink-0">{issue.part}:</span>
-                  <span>{issue.message}</span>
+                <div key={i} className={`flex items-start gap-3 px-4 py-3 text-xs leading-relaxed ${issue.severity === 'error' ? 'bg-red-50' : 'bg-yellow-50'}`}>
+                  <span className={`shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-black ${issue.severity === 'error' ? 'bg-red-500' : 'bg-yellow-400'}`}>
+                    {issue.severity === 'error' ? '✕' : '!'}
+                  </span>
+                  <div>
+                    <span className={`font-black ${issue.severity === 'error' ? 'text-red-700' : 'text-yellow-700'}`}>{issue.part}: </span>
+                    <span className={issue.severity === 'error' ? 'text-red-800' : 'text-yellow-800'}>{issue.message}</span>
+                  </div>
                 </div>
               ))}
             </motion.div>
@@ -1212,13 +1284,24 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
 
             {/* Compatibility summary in sidebar */}
             {compatibilityIssues.length > 0 && (
-              <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-xl space-y-1.5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-600" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">{compatibilityIssues.length} Issue{compatibilityIssues.length > 1 ? 's' : ''}</span>
+              <div className="mb-6 rounded-xl overflow-hidden border divide-y divide-gray-100">
+                <div className={`flex items-center gap-1.5 px-3 py-2 ${compatibilityIssues.some(i => i.severity === 'error') ? 'bg-red-600' : 'bg-yellow-500'}`}>
+                  <AlertTriangle className="w-3 h-3 text-white" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white">
+                    {compatibilityIssues.filter(i => i.severity === 'error').length > 0
+                      ? `${compatibilityIssues.filter(i => i.severity === 'error').length} Error${compatibilityIssues.filter(i => i.severity === 'error').length > 1 ? 's' : ''}`
+                      : `${compatibilityIssues.length} Warning${compatibilityIssues.length > 1 ? 's' : ''}`}
+                  </span>
                 </div>
                 {compatibilityIssues.map((issue, i) => (
-                  <p key={i} className="text-[10px] text-yellow-800 leading-relaxed">{issue.message}</p>
+                  <div key={i} className={`px-3 py-2 flex gap-2 items-start ${issue.severity === 'error' ? 'bg-red-50' : 'bg-yellow-50'}`}>
+                    <span className={`shrink-0 mt-0.5 text-[9px] font-black ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
+                      {issue.severity === 'error' ? '✕' : '!'}
+                    </span>
+                    <p className={`text-[10px] leading-relaxed ${issue.severity === 'error' ? 'text-red-800' : 'text-yellow-800'}`}>
+                      <span className="font-bold">{issue.part}:</span> {issue.message}
+                    </p>
+                  </div>
                 ))}
               </div>
             )}
@@ -1228,9 +1311,14 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Total Estimate</span>
                 <span className="text-2xl font-bold text-red-600">₱{buildTotal.toLocaleString()}</span>
               </div>
-              {compatibilityIssues.length > 0 && (
+              {compatibilityIssues.some(i => i.severity === 'error') && (
+                <p className="text-[10px] text-red-600 font-medium leading-relaxed">
+                  ❌ Your build has critical compatibility errors. Some parts will not work together.
+                </p>
+              )}
+              {!compatibilityIssues.some(i => i.severity === 'error') && compatibilityIssues.length > 0 && (
                 <p className="text-[10px] text-yellow-600 font-medium leading-relaxed">
-                  ⚠️ Your build has compatibility issues. You can still add it to cart, but some parts may not work together.
+                  ⚠️ Your build has warnings. Review before purchasing.
                 </p>
               )}
               <button
