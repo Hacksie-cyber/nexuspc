@@ -78,6 +78,20 @@ interface UserProfile {
   joined: string;
 }
 
+interface Booking {
+  id: string;
+  uid: string;
+  customer: string;
+  email: string;
+  phone: string;
+  service: string;
+  date: string;
+  time: string;
+  notes: string;
+  status: 'Pending' | 'Accepted' | 'Declined';
+  createdAt: any;
+}
+
 const SAMPLE_ORDERS: Order[] = [
   { id: '#ORD-001', customer: 'Marco Reyes', email: 'marco@email.com', items: 3, total: 28500, payment: 'GCash', status: 'Delivered', date: '2025-01-10' },
   { id: '#ORD-002', customer: 'Sofia Lim', email: 'sofia@email.com', items: 5, total: 62400, payment: 'PayPal', status: 'Shipped', date: '2025-01-12' },
@@ -107,6 +121,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -144,10 +159,17 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
       setUsers(uData);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
+    const bUnsubscribe = onSnapshot(collection(db, 'bookings'), (snapshot) => {
+      const bData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Booking));
+      bData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setBookings(bData);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'bookings'));
+
     return () => {
       pUnsubscribe();
       oUnsubscribe();
       uUnsubscribe();
+      bUnsubscribe();
     };
   }, []);
 
@@ -230,6 +252,15 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
       showToast(`Order ${id} updated to ${status}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `orders/${id}`);
+    }
+  };
+
+  const handleBookingAction = async (id: string, status: 'Accepted' | 'Declined') => {
+    try {
+      await updateDoc(doc(db, 'bookings', id), { status });
+      showToast(`Booking ${status.toLowerCase()} successfully.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `bookings/${id}`);
     }
   };
 
@@ -355,6 +386,13 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
               active={activeTab === 'orders'} 
               onClick={() => setActiveTab('orders')} 
               badge={stats.pending > 0 ? stats.pending : undefined}
+            />
+            <SidebarItem
+              icon={<Clock size={18} />}
+              label="Bookings"
+              active={activeTab === 'bookings'}
+              onClick={() => setActiveTab('bookings')}
+              badge={bookings.filter(b => b.status === 'Pending').length || undefined}
             />
             <SidebarItem icon={<Users size={18} />} label="Customers" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
           </div>
@@ -1344,6 +1382,129 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                       Create Product
                     </button>
                   </form>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'bookings' && (
+              <motion.div
+                key="bookings"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { label: 'Total Bookings', value: bookings.length, color: 'text-gray-900' },
+                    { label: 'Pending', value: bookings.filter(b => b.status === 'Pending').length, color: 'text-orange-500' },
+                    { label: 'Accepted', value: bookings.filter(b => b.status === 'Accepted').length, color: 'text-green-600' },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">{s.label}</div>
+                      <div className={`text-3xl font-black ${s.color}`}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bookings list */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900">All Bookings</h3>
+                    <div className="flex gap-2">
+                      {['All', 'Pending', 'Accepted', 'Declined'].map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setSearchQuery(f === 'All' ? '' : f)}
+                          className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
+                            (f === 'All' && searchQuery === '') || searchQuery === f
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {bookings.length === 0 ? (
+                    <div className="py-20 text-center text-gray-400">
+                      <Clock size={40} className="mx-auto mb-4 opacity-20" />
+                      <p className="font-medium">No bookings yet.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {bookings
+                        .filter(b => !searchQuery || b.status === searchQuery)
+                        .map(b => (
+                          <div key={b.id} className="p-6 flex flex-col md:flex-row md:items-center gap-4 hover:bg-gray-50 transition-colors">
+                            {/* Service icon */}
+                            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-lg shrink-0">
+                              {b.service === 'Custom PC Building' ? '🖥️'
+                                : b.service === 'Repair & Diagnosis' ? '🔧'
+                                : b.service === 'Hardware Upgrade' ? '⬆️'
+                                : '💬'}
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                <span className="font-bold text-sm">{b.customer}</span>
+                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                                  b.status === 'Pending' ? 'bg-orange-100 text-orange-600'
+                                  : b.status === 'Accepted' ? 'bg-green-100 text-green-600'
+                                  : 'bg-red-100 text-red-500'
+                                }`}>{b.status}</span>
+                              </div>
+                              <p className="text-xs text-green-600 font-bold mb-0.5">{b.service}</p>
+                              <p className="text-[11px] text-gray-400">{b.email} · {b.phone}</p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                📅 {b.date} at {b.time}
+                                {b.notes && <span className="ml-2 italic text-gray-400">"{b.notes}"</span>}
+                              </p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-2 shrink-0">
+                              {b.status === 'Pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleBookingAction(b.id, 'Accepted')}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-green-600/20"
+                                  >
+                                    <CheckCircle2 size={13} /> Accept
+                                  </button>
+                                  <button
+                                    onClick={() => handleBookingAction(b.id, 'Declined')}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-500 text-xs font-bold uppercase tracking-widest rounded-xl border border-red-200 transition-all active:scale-95"
+                                  >
+                                    <X size={13} /> Decline
+                                  </button>
+                                </>
+                              )}
+                              {b.status === 'Accepted' && (
+                                <button
+                                  onClick={() => handleBookingAction(b.id, 'Declined')}
+                                  className="text-[10px] text-gray-400 hover:text-red-500 font-bold uppercase tracking-widest transition-colors"
+                                >
+                                  Revoke
+                                </button>
+                              )}
+                              {b.status === 'Declined' && (
+                                <button
+                                  onClick={() => handleBookingAction(b.id, 'Accepted')}
+                                  className="text-[10px] text-gray-400 hover:text-green-600 font-bold uppercase tracking-widest transition-colors"
+                                >
+                                  Re-accept
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
