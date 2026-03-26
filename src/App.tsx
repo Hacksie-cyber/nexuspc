@@ -1002,6 +1002,62 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
   const currentStepId = steps[builderStep].id;
   const options = products.filter(p => p.category === currentStepId);
 
+  // ── Compatibility Engine ─────────────────────────────────────────
+  const getCompatibilityIssues = (testBuild: BuildState): { part: string; message: string }[] => {
+    const issues: { part: string; message: string }[] = [];
+    const cpu = testBuild['cpu'] as Product | null;
+    const motherboard = testBuild['motherboard'] as Product | null;
+    const ram = testBuild['ram'] as Product | null;
+    const gpu = testBuild['gpu'] as Product | null;
+    const psu = testBuild['psu'] as Product | null;
+
+    // CPU ↔ Motherboard socket check
+    if (cpu && motherboard && cpu.socket && motherboard.socket) {
+      if (cpu.socket !== motherboard.socket) {
+        issues.push({
+          part: 'CPU / Motherboard',
+          message: `Socket mismatch — CPU uses ${cpu.socket} but motherboard supports ${motherboard.socket}.`,
+        });
+      }
+    }
+
+    // Motherboard ↔ RAM type check
+    if (motherboard && ram && motherboard.ramType && ram.ramType) {
+      if (motherboard.ramType !== ram.ramType) {
+        issues.push({
+          part: 'Motherboard / RAM',
+          message: `RAM type mismatch — motherboard supports ${motherboard.ramType} but selected RAM is ${ram.ramType}.`,
+        });
+      }
+    }
+
+    // PSU wattage check — sum watts of cpu + gpu + 100W baseline for rest
+    if (psu && psu.watts) {
+      const cpuWatts = cpu?.watts || 0;
+      const gpuWatts = gpu?.watts || 0;
+      const baselineWatts = 100; // mobo + ram + storage + fans
+      const totalRequired = cpuWatts + gpuWatts + baselineWatts;
+      if (totalRequired > psu.watts) {
+        issues.push({
+          part: 'PSU',
+          message: `Insufficient power — build needs ~${totalRequired}W but PSU is only ${psu.watts}W.`,
+        });
+      }
+    }
+
+    return issues;
+  };
+
+  // Check compatibility of a candidate part against the current build
+  const getPartWarning = (part: Product): string | null => {
+    const testBuild = { ...build, [currentStepId]: part };
+    const issues = getCompatibilityIssues(testBuild);
+    if (issues.length === 0) return null;
+    return issues.map(i => i.message).join(' ');
+  };
+
+  const compatibilityIssues = getCompatibilityIssues(build);
+
   const addFullBuildToCart = () => {
     const parts = Object.values(build).filter(p => p !== null) as Product[];
     parts.forEach(p => addToCart(p));
@@ -1016,20 +1072,50 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
         <div className="lg:col-span-2 space-y-8">
           {/* Steps Nav */}
           <div className="flex bg-white rounded-xl border border-gray-200 overflow-x-auto no-scrollbar shadow-sm">
-            {steps.map((step, i) => (
-              <button
-                key={step.id}
-                onClick={() => setBuilderStep(i)}
-                className={`flex-1 min-w-[100px] py-4 px-2 flex flex-col items-center gap-2 border-r last:border-r-0 transition-all ${
-                  builderStep === i ? 'bg-green-600 text-white' : 'hover:bg-gray-50'
-                }`}
-              >
-                <span className={`text-[10px] font-bold uppercase tracking-widest opacity-60 ${builderStep === i ? 'text-white' : 'text-gray-400'}`}>Step 0{i+1}</span>
-                <span className="text-xs font-bold uppercase tracking-wider">{step.label}</span>
-                {build[step.id] && builderStep !== i && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-              </button>
-            ))}
+            {steps.map((step, i) => {
+              // Show warning dot on step tab if this step's part has issues
+              const stepHasIssue = compatibilityIssues.some(issue =>
+                issue.part.toLowerCase().includes(step.id) ||
+                issue.part.toLowerCase().includes(step.label.toLowerCase())
+              );
+              return (
+                <button
+                  key={step.id}
+                  onClick={() => setBuilderStep(i)}
+                  className={`flex-1 min-w-[100px] py-4 px-2 flex flex-col items-center gap-2 border-r last:border-r-0 transition-all relative ${
+                    builderStep === i ? 'bg-green-600 text-white' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-[10px] font-bold uppercase tracking-widest opacity-60 ${builderStep === i ? 'text-white' : 'text-gray-400'}`}>Step 0{i+1}</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">{step.label}</span>
+                  {build[step.id] && builderStep !== i && !stepHasIssue && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                  {build[step.id] && stepHasIssue && (
+                    <span className="w-4 h-4 rounded-full bg-yellow-400 flex items-center justify-center text-[9px] font-black text-yellow-900">!</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Active Compatibility Warnings Banner */}
+          {compatibilityIssues.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0" />
+                <span className="text-xs font-black uppercase tracking-widest text-yellow-700">Compatibility Issues Detected</span>
+              </div>
+              {compatibilityIssues.map((issue, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs text-yellow-800 leading-relaxed">
+                  <span className="font-bold shrink-0">{issue.part}:</span>
+                  <span>{issue.message}</span>
+                </div>
+              ))}
+            </motion.div>
+          )}
 
           {/* Options Grid */}
           <div>
@@ -1038,27 +1124,57 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
               Select {steps[builderStep].label}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {options.map(p => (
-                <div 
-                  key={p.id}
-                  onClick={() => selectPart(currentStepId, p)}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex gap-4 group ${
-                    build[currentStepId]?.id === p.id 
-                      ? 'border-green-500 bg-green-50' 
-                      : 'border-gray-100 bg-white hover:border-green-200'
-                  }`}
-                >
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
-                    <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-sm mb-1">{p.name}</h3>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">{p.brand}</p>
-                    <div className="text-sm font-bold text-red-600">₱{p.price.toLocaleString()}</div>
-                  </div>
-                  {build[currentStepId]?.id === p.id && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+              {options.length === 0 ? (
+                <div className="col-span-2 py-16 text-center text-gray-400">
+                  <HardDrive className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-sm font-medium">No {steps[builderStep].label} products in inventory yet.</p>
                 </div>
-              ))}
+              ) : (
+                options.map(p => {
+                  const warning = getPartWarning(p);
+                  const isSelected = build[currentStepId]?.id === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => selectPart(currentStepId, p)}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex gap-4 group relative ${
+                        isSelected
+                          ? 'border-green-500 bg-green-50'
+                          : warning
+                          ? 'border-yellow-300 bg-yellow-50/50 hover:border-yellow-400'
+                          : 'border-gray-100 bg-white hover:border-green-200'
+                      }`}
+                    >
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
+                        <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-sm mb-1 leading-tight">{p.name}</h3>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{p.brand}</p>
+                        {/* Spec tags */}
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {p.socket && <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase">{p.socket}</span>}
+                          {p.ramType && <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase">{p.ramType}</span>}
+                          {p.watts && <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase">{p.watts}W</span>}
+                        </div>
+                        <div className="text-sm font-bold text-red-600">₱{p.price.toLocaleString()}</div>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end justify-between">
+                        {isSelected && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+                        {!isSelected && warning && (
+                          <div className="group/tip relative">
+                            <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                            {/* Tooltip */}
+                            <div className="absolute right-0 top-6 w-52 bg-gray-900 text-white text-[10px] leading-relaxed rounded-lg p-2.5 hidden group-hover/tip:block z-10 shadow-xl">
+                              {warning}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -1067,37 +1183,71 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
         <aside className="space-y-6">
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm sticky top-40">
             <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-6 border-b pb-4">Build Summary</h3>
-            <div className="space-y-4 mb-8">
-              {steps.map(step => (
-                <div key={step.id} className="flex justify-between items-start gap-4">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pt-1">{step.label}</div>
-                  <div className="text-right flex-1">
-                    {build[step.id] ? (
-                      <>
-                        <div className="text-xs font-bold leading-tight truncate max-w-[140px] ml-auto">{build[step.id]?.name}</div>
-                        <div className="text-[10px] font-bold text-red-600">₱{build[step.id]?.price.toLocaleString()}</div>
-                      </>
-                    ) : (
-                      <div className="text-xs text-gray-300 italic">Not selected</div>
-                    )}
+            <div className="space-y-4 mb-6">
+              {steps.map(step => {
+                const partHasIssue = compatibilityIssues.some(issue =>
+                  issue.part.toLowerCase().includes(step.id) ||
+                  issue.part.toLowerCase().includes(step.label.toLowerCase())
+                );
+                return (
+                  <div key={step.id} className="flex justify-between items-start gap-4">
+                    <div className={`text-[10px] font-bold uppercase tracking-widest pt-1 flex items-center gap-1 ${partHasIssue ? 'text-yellow-500' : 'text-gray-400'}`}>
+                      {partHasIssue && <AlertTriangle className="w-3 h-3" />}
+                      {step.label}
+                    </div>
+                    <div className="text-right flex-1">
+                      {build[step.id] ? (
+                        <>
+                          <div className="text-xs font-bold leading-tight truncate max-w-[140px] ml-auto">{build[step.id]?.name}</div>
+                          <div className="text-[10px] font-bold text-red-600">₱{build[step.id]?.price.toLocaleString()}</div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-gray-300 italic">Not selected</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="pt-6 border-t space-y-6">
+            {/* Compatibility summary in sidebar */}
+            {compatibilityIssues.length > 0 && (
+              <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">{compatibilityIssues.length} Issue{compatibilityIssues.length > 1 ? 's' : ''}</span>
+                </div>
+                {compatibilityIssues.map((issue, i) => (
+                  <p key={i} className="text-[10px] text-yellow-800 leading-relaxed">{issue.message}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="pt-4 border-t space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Total Estimate</span>
                 <span className="text-2xl font-bold text-red-600">₱{buildTotal.toLocaleString()}</span>
               </div>
-              <button 
+              {compatibilityIssues.length > 0 && (
+                <p className="text-[10px] text-yellow-600 font-medium leading-relaxed">
+                  ⚠️ Your build has compatibility issues. You can still add it to cart, but some parts may not work together.
+                </p>
+              )}
+              <button
                 onClick={addFullBuildToCart}
                 disabled={Object.values(build).every(v => v === null)}
-                className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                  compatibilityIssues.length > 0
+                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white shadow-yellow-500/20'
+                    : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
+                }`}
               >
-                Add Build to Cart
+                {compatibilityIssues.length > 0 ? '⚠️ Add Build Anyway' : 'Add Build to Cart'}
               </button>
             </div>
+          </div>
+        </aside>
+      </div>
           </div>
         </aside>
       </div>
