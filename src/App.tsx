@@ -1249,9 +1249,6 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
         </aside>
       </div>
           </div>
-        </aside>
-      </div>
-    </div>
   );
 }
 
