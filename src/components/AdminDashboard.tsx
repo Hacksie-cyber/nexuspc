@@ -530,6 +530,67 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                       />
                     </div>
 
+                    {/* Compatibility Fields */}
+                    {['cpu', 'motherboard', 'ram', 'gpu', 'psu'].includes(editingProduct.category || '') && (
+                      <div className="border border-dashed border-green-200 bg-green-50/40 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-green-700">⚡ Compatibility Fields</span>
+                          <span className="text-[10px] text-green-500">— used by PC Builder to detect incompatible parts</span>
+                        </div>
+
+                        {['cpu', 'motherboard'].includes(editingProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              CPU Socket <span className="text-gray-300 normal-case font-normal">(e.g. AM5, LGA1700, LGA1851)</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. AM5"
+                              value={editingProduct.socket || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, socket: e.target.value })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            />
+                          </div>
+                        )}
+
+                        {['motherboard', 'ram'].includes(editingProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              RAM Type <span className="text-gray-300 normal-case font-normal">(e.g. DDR4, DDR5)</span>
+                            </label>
+                            <select
+                              value={editingProduct.ramType || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, ramType: e.target.value })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            >
+                              <option value="">— Select RAM Type —</option>
+                              <option value="DDR3">DDR3</option>
+                              <option value="DDR4">DDR4</option>
+                              <option value="DDR5">DDR5</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {['cpu', 'gpu', 'psu'].includes(editingProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              {editingProduct.category === 'psu' ? 'PSU Wattage (W)' : 'TDP / Power Draw (W)'}
+                              <span className="text-gray-300 normal-case font-normal ml-1">
+                                {editingProduct.category === 'psu' ? '(e.g. 650, 850)' : '(e.g. 125, 200)'}
+                              </span>
+                            </label>
+                            <input
+                              type="number"
+                              placeholder={editingProduct.category === 'psu' ? 'e.g. 650' : 'e.g. 125'}
+                              value={editingProduct.watts || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, watts: parseInt(e.target.value) || undefined })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex gap-4 pt-4">
                       <button 
                         type="button"
@@ -1214,6 +1275,67 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                         className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all resize-none"
                       />
                     </div>
+
+                    {/* Compatibility Fields */}
+                    {['cpu', 'motherboard', 'ram', 'gpu', 'psu'].includes(newProduct.category || '') && (
+                      <div className="border border-dashed border-green-200 bg-green-50/40 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-green-700">⚡ Compatibility Fields</span>
+                          <span className="text-[10px] text-green-500">— used by PC Builder to detect incompatible parts</span>
+                        </div>
+
+                        {['cpu', 'motherboard'].includes(newProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              CPU Socket <span className="text-gray-300 normal-case font-normal">(e.g. AM5, LGA1700, LGA1851)</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. AM5"
+                              value={newProduct.socket || ''}
+                              onChange={(e) => setNewProduct({ ...newProduct, socket: e.target.value })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            />
+                          </div>
+                        )}
+
+                        {['motherboard', 'ram'].includes(newProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              RAM Type <span className="text-gray-300 normal-case font-normal">(e.g. DDR4, DDR5)</span>
+                            </label>
+                            <select
+                              value={newProduct.ramType || ''}
+                              onChange={(e) => setNewProduct({ ...newProduct, ramType: e.target.value })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            >
+                              <option value="">— Select RAM Type —</option>
+                              <option value="DDR3">DDR3</option>
+                              <option value="DDR4">DDR4</option>
+                              <option value="DDR5">DDR5</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {['cpu', 'gpu', 'psu'].includes(newProduct.category || '') && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              {newProduct.category === 'psu' ? 'PSU Wattage (W)' : 'TDP / Power Draw (W)'}
+                              <span className="text-gray-300 normal-case font-normal ml-1">
+                                {newProduct.category === 'psu' ? '(e.g. 650, 850)' : '(e.g. 125, 200)'}
+                              </span>
+                            </label>
+                            <input
+                              type="number"
+                              placeholder={newProduct.category === 'psu' ? 'e.g. 650' : 'e.g. 125'}
+                              value={newProduct.watts || ''}
+                              onChange={(e) => setNewProduct({ ...newProduct, watts: parseInt(e.target.value) || undefined })}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <button 
                       type="submit"
