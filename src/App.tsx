@@ -499,7 +499,7 @@ export default function App() {
             products={products}
           />
         )}
-        {page === 'services' && <ServicesPage />}
+        {page === 'services' && <ServicesPage user={user} navigate={navigate} login={login} />}
         {page === 'contact' && <ContactPage />}
         {page === 'profile' && <ProfilePage user={user} orders={orders} navigate={navigate} logout={logout} />}
       </main>
@@ -1003,105 +1003,44 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
   const options = products.filter(p => p.category === currentStepId);
 
   // ── Compatibility Engine ─────────────────────────────────────────
-  const getCompatibilityIssues = (testBuild: BuildState): { part: string; message: string; severity: 'error' | 'warning' }[] => {
-    const issues: { part: string; message: string; severity: 'error' | 'warning' }[] = [];
+  const getCompatibilityIssues = (testBuild: BuildState): { part: string; message: string }[] => {
+    const issues: { part: string; message: string }[] = [];
     const cpu = testBuild['cpu'] as Product | null;
     const motherboard = testBuild['motherboard'] as Product | null;
     const ram = testBuild['ram'] as Product | null;
     const gpu = testBuild['gpu'] as Product | null;
     const psu = testBuild['psu'] as Product | null;
-    const pcCase = testBuild['case'] as Product | null;
 
-    // Missing critical components warnings
-    const selectedCount = Object.values(testBuild).filter(v => v !== null).length;
-    if (selectedCount > 0) {
-      if (!cpu) issues.push({ part: 'CPU', message: 'No processor selected — a CPU is required for every build.', severity: 'warning' });
-      if (!motherboard) issues.push({ part: 'Motherboard', message: 'No motherboard selected — required to connect all components.', severity: 'warning' });
-      if (!ram) issues.push({ part: 'RAM', message: 'No memory selected — your build needs RAM to function.', severity: 'warning' });
-      if (!psu) issues.push({ part: 'PSU', message: 'No power supply selected — required to power all components.', severity: 'warning' });
-      if (!pcCase) issues.push({ part: 'Case', message: 'No case selected — needed to house your components.', severity: 'warning' });
-    }
-
-    // CPU <-> Motherboard socket check
+    // CPU ↔ Motherboard socket check
     if (cpu && motherboard && cpu.socket && motherboard.socket) {
       if (cpu.socket !== motherboard.socket) {
         issues.push({
           part: 'CPU / Motherboard',
-          message: `Socket mismatch — CPU uses ${cpu.socket} but motherboard only supports ${motherboard.socket}. These are physically incompatible.`,
-          severity: 'error',
+          message: `Socket mismatch — CPU uses ${cpu.socket} but motherboard supports ${motherboard.socket}.`,
         });
       }
     }
 
-    // Motherboard <-> RAM type check
+    // Motherboard ↔ RAM type check
     if (motherboard && ram && motherboard.ramType && ram.ramType) {
       if (motherboard.ramType !== ram.ramType) {
         issues.push({
           part: 'Motherboard / RAM',
-          message: `RAM type mismatch — motherboard supports ${motherboard.ramType} but selected RAM is ${ram.ramType}. The RAM will not physically fit.`,
-          severity: 'error',
+          message: `RAM type mismatch — motherboard supports ${motherboard.ramType} but selected RAM is ${ram.ramType}.`,
         });
       }
     }
 
-    // CPU <-> RAM type cross-check
-    if (cpu && ram && (cpu as any).ramType && ram.ramType) {
-      if ((cpu as any).ramType !== ram.ramType) {
-        issues.push({
-          part: 'CPU / RAM',
-          message: `CPU supports ${(cpu as any).ramType} but selected RAM is ${ram.ramType}. Ensure your platform supports this memory type.`,
-          severity: 'error',
-        });
-      }
-    }
-
-    // PSU wattage check
+    // PSU wattage check — sum watts of cpu + gpu + 100W baseline for rest
     if (psu && psu.watts) {
       const cpuWatts = cpu?.watts || 0;
       const gpuWatts = gpu?.watts || 0;
-      const baselineWatts = 100;
+      const baselineWatts = 100; // mobo + ram + storage + fans
       const totalRequired = cpuWatts + gpuWatts + baselineWatts;
-      const recommended = Math.ceil((totalRequired * 1.2) / 50) * 50;
       if (totalRequired > psu.watts) {
         issues.push({
           part: 'PSU',
-          message: `Insufficient power — build needs ~${totalRequired}W but PSU is only ${psu.watts}W. Risk of instability. Recommended: at least ${recommended}W.`,
-          severity: 'error',
-        });
-      } else if (psu.watts < recommended) {
-        issues.push({
-          part: 'PSU',
-          message: `PSU has minimal headroom — build needs ~${totalRequired}W and PSU is ${psu.watts}W. Consider upgrading to ${recommended}W for stability.`,
-          severity: 'warning',
-        });
-      }
-    }
-
-    // Case <-> Motherboard form factor check
-    if (pcCase && motherboard && (pcCase as any).formFactor && (motherboard as any).formFactor) {
-      const caseForm = (pcCase as any).formFactor.toLowerCase();
-      const moboForm = (motherboard as any).formFactor.toLowerCase();
-      const fits =
-        (caseForm.includes('atx') && !caseForm.includes('m') && !caseForm.includes('mini')) ||
-        (caseForm.includes('matx') && (moboForm.includes('matx') || moboForm.includes('itx'))) ||
-        (caseForm.includes('itx') && moboForm.includes('itx')) ||
-        caseForm === moboForm;
-      if (!fits) {
-        issues.push({
-          part: 'Case / Motherboard',
-          message: `Form factor mismatch — case supports ${(pcCase as any).formFactor} but motherboard is ${(motherboard as any).formFactor}. The motherboard may not fit.`,
-          severity: 'error',
-        });
-      }
-    }
-
-    // Case <-> PSU form factor check
-    if (pcCase && psu && (pcCase as any).psuType && (psu as any).psuType) {
-      if ((pcCase as any).psuType.toLowerCase() !== (psu as any).psuType.toLowerCase()) {
-        issues.push({
-          part: 'Case / PSU',
-          message: `PSU form factor mismatch — case expects a ${(pcCase as any).psuType} PSU but selected PSU is ${(psu as any).psuType}. The PSU may not mount correctly.`,
-          severity: 'error',
+          message: `Insufficient power — build needs ~${totalRequired}W but PSU is only ${psu.watts}W.`,
         });
       }
     }
@@ -1163,27 +1102,16 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl overflow-hidden border divide-y divide-gray-200 shadow-sm"
+              className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2"
             >
-              {/* Header */}
-              <div className={`flex items-center gap-2 px-4 py-3 ${compatibilityIssues.some(i => i.severity === 'error') ? 'bg-red-600' : 'bg-yellow-500'}`}>
-                <AlertTriangle className="w-4 h-4 text-white shrink-0" />
-                <span className="text-xs font-black uppercase tracking-widest text-white">
-                  {compatibilityIssues.filter(i => i.severity === 'error').length > 0
-                    ? `${compatibilityIssues.filter(i => i.severity === 'error').length} Compatibility Error${compatibilityIssues.filter(i => i.severity === 'error').length > 1 ? 's' : ''} Detected`
-                    : `${compatibilityIssues.length} Warning${compatibilityIssues.length > 1 ? 's' : ''}`}
-                </span>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0" />
+                <span className="text-xs font-black uppercase tracking-widest text-yellow-700">Compatibility Issues Detected</span>
               </div>
-              {/* Issues list */}
               {compatibilityIssues.map((issue, i) => (
-                <div key={i} className={`flex items-start gap-3 px-4 py-3 text-xs leading-relaxed ${issue.severity === 'error' ? 'bg-red-50' : 'bg-yellow-50'}`}>
-                  <span className={`shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-black ${issue.severity === 'error' ? 'bg-red-500' : 'bg-yellow-400'}`}>
-                    {issue.severity === 'error' ? '✕' : '!'}
-                  </span>
-                  <div>
-                    <span className={`font-black ${issue.severity === 'error' ? 'text-red-700' : 'text-yellow-700'}`}>{issue.part}: </span>
-                    <span className={issue.severity === 'error' ? 'text-red-800' : 'text-yellow-800'}>{issue.message}</span>
-                  </div>
+                <div key={i} className="flex items-start gap-2 text-xs text-yellow-800 leading-relaxed">
+                  <span className="font-bold shrink-0">{issue.part}:</span>
+                  <span>{issue.message}</span>
                 </div>
               ))}
             </motion.div>
@@ -1284,24 +1212,13 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
 
             {/* Compatibility summary in sidebar */}
             {compatibilityIssues.length > 0 && (
-              <div className="mb-6 rounded-xl overflow-hidden border divide-y divide-gray-100">
-                <div className={`flex items-center gap-1.5 px-3 py-2 ${compatibilityIssues.some(i => i.severity === 'error') ? 'bg-red-600' : 'bg-yellow-500'}`}>
-                  <AlertTriangle className="w-3 h-3 text-white" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white">
-                    {compatibilityIssues.filter(i => i.severity === 'error').length > 0
-                      ? `${compatibilityIssues.filter(i => i.severity === 'error').length} Error${compatibilityIssues.filter(i => i.severity === 'error').length > 1 ? 's' : ''}`
-                      : `${compatibilityIssues.length} Warning${compatibilityIssues.length > 1 ? 's' : ''}`}
-                  </span>
+              <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">{compatibilityIssues.length} Issue{compatibilityIssues.length > 1 ? 's' : ''}</span>
                 </div>
                 {compatibilityIssues.map((issue, i) => (
-                  <div key={i} className={`px-3 py-2 flex gap-2 items-start ${issue.severity === 'error' ? 'bg-red-50' : 'bg-yellow-50'}`}>
-                    <span className={`shrink-0 mt-0.5 text-[9px] font-black ${issue.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`}>
-                      {issue.severity === 'error' ? '✕' : '!'}
-                    </span>
-                    <p className={`text-[10px] leading-relaxed ${issue.severity === 'error' ? 'text-red-800' : 'text-yellow-800'}`}>
-                      <span className="font-bold">{issue.part}:</span> {issue.message}
-                    </p>
-                  </div>
+                  <p key={i} className="text-[10px] text-yellow-800 leading-relaxed">{issue.message}</p>
                 ))}
               </div>
             )}
@@ -1311,14 +1228,9 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Total Estimate</span>
                 <span className="text-2xl font-bold text-red-600">₱{buildTotal.toLocaleString()}</span>
               </div>
-              {compatibilityIssues.some(i => i.severity === 'error') && (
-                <p className="text-[10px] text-red-600 font-medium leading-relaxed">
-                  ❌ Your build has critical compatibility errors. Some parts will not work together.
-                </p>
-              )}
-              {!compatibilityIssues.some(i => i.severity === 'error') && compatibilityIssues.length > 0 && (
+              {compatibilityIssues.length > 0 && (
                 <p className="text-[10px] text-yellow-600 font-medium leading-relaxed">
-                  ⚠️ Your build has warnings. Review before purchasing.
+                  ⚠️ Your build has compatibility issues. You can still add it to cart, but some parts may not work together.
                 </p>
               )}
               <button
@@ -1336,11 +1248,77 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
           </div>
         </aside>
       </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function ServicesPage() {
+function ServicesPage({ user, navigate, login }: { user: any, navigate: (p: string) => void, login: () => void }) {
+  const [bookingService, setBookingService] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    date: '',
+    time: '',
+    notes: '',
+  });
+
+  const services = [
+    { title: 'Custom PC Building', price: '₱1,500', desc: 'Professional assembly with premium cable management, BIOS configuration, and stress testing.', icon: '🖥️' },
+    { title: 'Repair & Diagnosis', price: '₱500', desc: 'Comprehensive hardware diagnostics and repair for all PC issues.', icon: '🔧' },
+    { title: 'Hardware Upgrade', price: '₱300', desc: 'Expert installation of RAM, SSDs, GPUs, and other components.', icon: '⬆️' },
+    { title: 'Free Consultation', price: 'FREE', desc: '30-minute expert advice session for your next build or upgrade.', icon: '💬' },
+  ];
+
+  const openBooking = (serviceTitle: string) => {
+    if (!user) { login(); return; }
+    setForm({
+      name: user.displayName || '',
+      email: user.email || '',
+      phone: '',
+      date: '',
+      time: '',
+      notes: '',
+    });
+    setSubmitted(false);
+    setBookingService(serviceTitle);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSubmitting(true);
+    try {
+      await addDoc(collection(db, 'bookings'), {
+        uid: user.uid,
+        customer: form.name,
+        email: form.email,
+        phone: form.phone,
+        service: bookingService,
+        date: form.date,
+        time: form.time,
+        notes: form.notes,
+        status: 'Pending',
+        createdAt: serverTimestamp(),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Booking failed:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Min date = tomorrow
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 1);
+  const minDateStr = minDate.toISOString().split('T')[0];
+
   return (
     <div className="max-w-7xl mx-auto px-4 pt-12">
       <div className="text-center max-w-2xl mx-auto mb-20">
@@ -1349,12 +1327,7 @@ function ServicesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {[
-          { title: 'Custom PC Building', price: '₱1,500', desc: 'Professional assembly with premium cable management, BIOS configuration, and stress testing.', icon: '🖥️' },
-          { title: 'Repair & Diagnosis', price: '₱500', desc: 'Comprehensive hardware diagnostics and repair for all PC issues.', icon: '🔧' },
-          { title: 'Hardware Upgrade', price: '₱300', desc: 'Expert installation of RAM, SSDs, GPUs, and other components.', icon: '⬆️' },
-          { title: 'Free Consultation', price: 'FREE', desc: '30-minute expert advice session for your next build or upgrade.', icon: '💬' }
-        ].map((s, i) => (
+        {services.map((s, i) => (
           <div key={i} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm flex gap-6 group hover:shadow-md transition-all">
             <div className="text-4xl shrink-0">{s.icon}</div>
             <div className="flex-1">
@@ -1363,13 +1336,161 @@ function ServicesPage() {
                 <span className="text-green-600 font-bold text-sm">{s.price}</span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed mb-6">{s.desc}</p>
-              <button className="text-green-600 font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
-                Book Now <ChevronRight className="w-4 h-4" />
+              <button
+                onClick={() => openBooking(s.title)}
+                className="bg-green-600 text-white text-xs font-bold uppercase tracking-widest px-5 py-2.5 rounded-xl hover:bg-green-700 transition-all active:scale-95 shadow-lg shadow-green-600/20 flex items-center gap-2"
+              >
+                Book Now <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Booking Modal */}
+      <AnimatePresence>
+        {bookingService && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setBookingService(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 24 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-[#1a1a1a] px-8 py-6 flex items-center justify-between">
+                <div>
+                  <p className="text-green-500 text-[10px] font-bold uppercase tracking-widest mb-1">Book a Service</p>
+                  <h3 className="text-white font-black text-lg tracking-tight">{bookingService}</h3>
+                </div>
+                <button onClick={() => setBookingService(null)} className="text-white/40 hover:text-white transition-colors p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-8">
+                {submitted ? (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="text-center py-6"
+                  >
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h4 className="text-xl font-black tracking-tight mb-2">Booking Submitted!</h4>
+                    <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                      We've received your booking for <strong>{bookingService}</strong>. Our team will confirm your appointment shortly.
+                    </p>
+                    <button
+                      onClick={() => setBookingService(null)}
+                      className="bg-green-600 text-white px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-green-700 transition-all"
+                    >
+                      Done
+                    </button>
+                  </motion.div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Full Name</label>
+                        <input
+                          required
+                          type="text"
+                          value={form.name}
+                          onChange={e => setForm({ ...form, name: e.target.value })}
+                          className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Phone</label>
+                        <input
+                          required
+                          type="tel"
+                          placeholder="+63 9XX XXX XXXX"
+                          value={form.phone}
+                          onChange={e => setForm({ ...form, phone: e.target.value })}
+                          className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Email</label>
+                      <input
+                        required
+                        type="email"
+                        value={form.email}
+                        onChange={e => setForm({ ...form, email: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Preferred Date</label>
+                        <input
+                          required
+                          type="date"
+                          min={minDateStr}
+                          value={form.date}
+                          onChange={e => setForm({ ...form, date: e.target.value })}
+                          className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Preferred Time</label>
+                        <select
+                          required
+                          value={form.time}
+                          onChange={e => setForm({ ...form, time: e.target.value })}
+                          className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all"
+                        >
+                          <option value="">— Select —</option>
+                          <option>9:00 AM</option>
+                          <option>10:00 AM</option>
+                          <option>11:00 AM</option>
+                          <option>1:00 PM</option>
+                          <option>2:00 PM</option>
+                          <option>3:00 PM</option>
+                          <option>4:00 PM</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Notes <span className="text-gray-300 normal-case font-normal">(optional)</span></label>
+                      <textarea
+                        rows={3}
+                        placeholder="Describe your issue or any special requests..."
+                        value={form.notes}
+                        onChange={e => setForm({ ...form, notes: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 transition-all resize-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 disabled:opacity-50 active:scale-[0.98]"
+                    >
+                      {submitting ? 'Submitting...' : 'Confirm Booking'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
