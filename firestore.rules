@@ -61,8 +61,11 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        ((request.auth.token.email == "bamuyahacksie@gmail.com" && request.auth.token.email_verified == true) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+        (((request.auth.token.email == "bamuyahacksie@gmail.com" || 
+           request.auth.token.email == "donnicolebamuya@gmail.com") && 
+           request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function isValidEmail(email) {
@@ -114,7 +117,7 @@ service cloud.firestore {
         data.items is number && data.items > 0 &&
         data.total is number && data.total >= 0 &&
         data.payment is string &&
-        data.status in ['Processing', 'Shipped', 'Delivered', 'Cancelled'] &&
+        data.status in ['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refund Requested', 'Return & Rejected'] &&
         isValidDateString(data.date) &&
         data.uid is string &&
         data.cartItems is list &&
@@ -142,20 +145,41 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
       allow create: if isAuthenticated() && isValidOrder(request.resource.data) && request.resource.data.uid == request.auth.uid;
-      allow update: if isAdmin() && isValidOrder(request.resource.data);
+      allow update: if (isAdmin() && isValidOrder(request.resource.data)) ||
+                    (isAuthenticated() &&
+                     resource.data.uid == request.auth.uid &&
+                     request.resource.data.uid == resource.data.uid &&
+                     request.resource.data.status in ['Cancelled', 'Refund Requested', 'Return & Rejected'] &&
+                     resource.data.status in ['Processing', 'Shipped']);
       allow delete: if isAdmin();
     }
 
     match /users/{userId} {
       allow read: if isAdmin() || isOwner(userId);
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && isOwner(userId) && 
-                    (request.resource.data.role == 'client' || (request.resource.data.role == 'admin' && request.auth.token.email == "bamuyahacksie@gmail.com" && request.auth.token.email_verified == true));
+                    (request.resource.data.role == 'client' || (request.resource.data.role == 'admin' && (request.auth.token.email == "bamuyahacksie@gmail.com" || request.auth.token.email == "donnicolebamuya@gmail.com") && request.auth.token.email_verified == true));
       allow update: if (isAdmin() && isValidUser(request.resource.data)) || (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role);
       allow delete: if isAdmin();
     }
     
     match /test/connection {
       allow read: if true;
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow create: if isAuthenticated() &&
+                    request.resource.data.uid == request.auth.uid &&
+                    request.resource.data.keys().hasOnly(['uid', 'customer', 'email', 'phone', 'service', 'date', 'time', 'notes', 'status', 'createdAt']) &&
+                    request.resource.data.status == 'Pending' &&
+                    request.resource.data.customer is string &&
+                    request.resource.data.email is string &&
+                    request.resource.data.service is string &&
+                    request.resource.data.date is string &&
+                    request.resource.data.time is string;
+      allow update: if isAdmin() &&
+                    request.resource.data.status in ['Pending', 'Accepted', 'Declined'];
+      allow delete: if isAdmin();
     }
   }
 }
