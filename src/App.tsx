@@ -1249,6 +1249,9 @@ function BuilderPage({ build, selectPart, builderStep, setBuilderStep, buildTota
         </aside>
       </div>
           </div>
+        </aside>
+      </div>
+    </div>
   );
 }
 
@@ -1286,10 +1289,13 @@ function ServicesPage({ user, navigate, login }: { user: any, navigate: (p: stri
     setBookingService(serviceTitle);
   };
 
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) { login(); return; }
     setSubmitting(true);
+    setBookingError(null);
     try {
       await addDoc(collection(db, 'bookings'), {
         uid: user.uid,
@@ -1299,13 +1305,14 @@ function ServicesPage({ user, navigate, login }: { user: any, navigate: (p: stri
         service: bookingService,
         date: form.date,
         time: form.time,
-        notes: form.notes,
+        notes: form.notes || '',
         status: 'Pending',
         createdAt: serverTimestamp(),
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Booking failed:', err);
+      setBookingError(err?.message || 'Failed to submit booking. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1474,6 +1481,12 @@ function ServicesPage({ user, navigate, login }: { user: any, navigate: (p: stri
                       />
                     </div>
 
+                    {bookingError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-medium px-4 py-3 rounded-xl flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        {bookingError}
+                      </div>
+                    )}
                     <button
                       type="submit"
                       disabled={submitting}
