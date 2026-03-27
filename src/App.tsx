@@ -722,8 +722,7 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
-      </div>
-      {/* Toasts */}
+
       {/* Payment Modal */}
       <AnimatePresence>
         {paymentModal && (
