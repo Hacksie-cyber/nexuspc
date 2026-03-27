@@ -65,9 +65,10 @@ interface Order {
   items: number;
   total: number;
   payment: string;
-  status: 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled' | 'Refund Requested' | 'Return & Rejected';
+  status: 'Awaiting Payment' | 'Payment Submitted' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled' | 'Refund Requested' | 'Return & Rejected';
   date: string;
   cartItems?: { id: number; name: string; price: number; qty: number }[];
+  proofOfPayment?: string;
 }
 
 interface UserProfile {
@@ -671,6 +672,38 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                   <StatCard icon={<AlertTriangle />} label="Low Stock" value={stats.lowStock.toString()} trend="+2 today" color="red" />
                 </div>
 
+                {/* Payment Alerts */}
+                {orders.filter(o => o.status === 'Payment Submitted' || o.status === 'Awaiting Payment').length > 0 && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-sm">💳</div>
+                      <div>
+                        <h3 className="font-bold text-indigo-900 text-sm">Payments Requiring Attention</h3>
+                        <p className="text-[10px] text-indigo-500">Review and verify customer payment proofs</p>
+                      </div>
+                      <button onClick={() => setActiveTab('orders')} className="ml-auto text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:text-indigo-800 border border-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-all">
+                        View Orders →
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {orders.filter(o => o.status === 'Payment Submitted' || o.status === 'Awaiting Payment').slice(0, 3).map(o => (
+                        <div key={o.id} className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-indigo-100">
+                          <div>
+                            <span className="text-sm font-bold text-gray-900">{o.customer}</span>
+                            <span className="text-[10px] text-gray-400 ml-2">via {o.payment}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-gray-900">{fmt(o.total)}</span>
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${o.status === 'Payment Submitted' ? 'bg-indigo-100 text-indigo-600' : 'bg-purple-100 text-purple-600'}`}>
+                              {o.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Revenue Chart */}
                   <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
@@ -1026,7 +1059,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                                     onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
                                     className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-green-500"
                                   >
-                                    {['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refund Requested', 'Return & Rejected'].map(s => (
+                                    {['Awaiting Payment', 'Payment Submitted', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refund Requested', 'Return & Rejected'].map(s => (
                                       <option key={s} value={s}>{s}</option>
                                     ))}
                                   </select>
@@ -1076,7 +1109,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                           <div>
-                                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Payment</h4>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Payment Method</h4>
                                             <div className="text-sm font-bold text-gray-900">{order.payment}</div>
                                           </div>
                                           <div>
@@ -1084,6 +1117,74 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                                             <div className="text-sm font-bold text-gray-900">{new Date(order.date).toLocaleString()}</div>
                                           </div>
                                         </div>
+
+                                        {/* Proof of Payment Section */}
+                                        {(order.payment === 'GCash' || order.payment === 'Bank Transfer') && (
+                                          <div>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Proof of Payment</h4>
+                                            {order.proofOfPayment ? (
+                                              <div className="space-y-3">
+                                                <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                                                  <img
+                                                    src={order.proofOfPayment}
+                                                    alt="Proof of Payment"
+                                                    className="w-full max-h-64 object-contain"
+                                                  />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                  <a
+                                                    href={order.proofOfPayment}
+                                                    download={`proof-${order.id}.jpg`}
+                                                    className="flex-1 text-center text-[10px] font-bold uppercase tracking-widest px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-all"
+                                                  >
+                                                    ⬇ Download
+                                                  </a>
+                                                  {order.status === 'Payment Submitted' && (
+                                                    <>
+                                                      <button
+                                                        onClick={() => handleUpdateOrderStatus(order.id, 'Processing')}
+                                                        className="flex-1 text-[10px] font-bold uppercase tracking-widest px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all shadow-lg shadow-green-600/20"
+                                                      >
+                                                        ✓ Verify & Process
+                                                      </button>
+                                                      <button
+                                                        onClick={() => handleUpdateOrderStatus(order.id, 'Awaiting Payment')}
+                                                        className="flex-1 text-[10px] font-bold uppercase tracking-widest px-3 py-2 bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 rounded-lg transition-all"
+                                                      >
+                                                        ✕ Reject Proof
+                                                      </button>
+                                                    </>
+                                                  )}
+                                                </div>
+                                                {order.status === 'Payment Submitted' && (
+                                                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs text-indigo-700 font-medium">
+                                                    ⏳ Payment proof submitted by customer — review the screenshot and verify or reject.
+                                                  </div>
+                                                )}
+                                                {order.status === 'Processing' && (
+                                                  <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-xs text-green-700 font-medium">
+                                                    ✅ Payment verified and order is now processing.
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-5 text-center">
+                                                {order.status === 'Awaiting Payment' ? (
+                                                  <>
+                                                    <div className="text-2xl mb-2">⏳</div>
+                                                    <p className="text-xs font-bold text-gray-500">Waiting for customer to submit payment proof</p>
+                                                    <p className="text-[10px] text-gray-400 mt-1">The customer has been shown {order.payment} payment instructions.</p>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <div className="text-2xl mb-2">📎</div>
+                                                    <p className="text-xs font-bold text-gray-500">No proof of payment uploaded</p>
+                                                  </>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </motion.div>
@@ -1606,6 +1707,8 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function StatusBadge({ status }: { status: Order['status'] }) {
   const styles: Record<string, string> = {
+    'Awaiting Payment': 'bg-purple-50 text-purple-600 border-purple-100',
+    'Payment Submitted': 'bg-indigo-50 text-indigo-600 border-indigo-100',
     Processing: 'bg-orange-50 text-orange-600 border-orange-100',
     Shipped: 'bg-blue-50 text-blue-600 border-blue-100',
     Delivered: 'bg-green-50 text-green-600 border-green-100',
