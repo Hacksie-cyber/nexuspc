@@ -133,6 +133,10 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'GCash' | 'Cash on Delivery' | 'Bank Transfer'>('GCash');
+  const [paymentModal, setPaymentModal] = useState<{ orderId: string; method: string; total: number } | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofUploading, setProofUploading] = useState(false);
+  const [proofSubmitted, setProofSubmitted] = useState(false);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
@@ -254,11 +258,7 @@ export default function App() {
   };
 
   const handleCheckout = async () => {
-    if (!user) {
-      login();
-      return;
-    }
-
+    if (!user) { login(); return; }
     if (cart.length === 0) return;
 
     const orderData = {
@@ -268,7 +268,7 @@ export default function App() {
       items: cart.length,
       total: cartTotal,
       payment: paymentMethod,
-      status: 'Processing',
+      status: paymentMethod === 'Cash on Delivery' ? 'Processing' : 'Awaiting Payment',
       date: new Date().toISOString(),
       createdAt: serverTimestamp(),
       cartItems: cart.map(item => ({
@@ -280,13 +280,41 @@ export default function App() {
     };
 
     try {
-      await addDoc(collection(db, 'orders'), orderData);
+      const docRef = await addDoc(collection(db, 'orders'), orderData);
       setCart([]);
       setIsCartOpen(false);
-      showToast('Order placed successfully! Thank you for shopping with NEXUS PC.');
+      if (paymentMethod === 'Cash on Delivery') {
+        showToast('Order placed! Pay when your order arrives.');
+      } else {
+        setProofFile(null);
+        setProofSubmitted(false);
+        setPaymentModal({ orderId: docRef.id, method: paymentMethod, total: cartTotal });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'orders');
       showToast('Failed to place order. Please try again.', 'error');
+    }
+  };
+
+  const handleProofSubmit = async () => {
+    if (!proofFile || !paymentModal) return;
+    setProofUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        await updateDoc(doc(db, 'orders', paymentModal.orderId), {
+          proofOfPayment: base64,
+          status: 'Payment Submitted',
+        });
+        setProofSubmitted(true);
+        setProofUploading(false);
+        showToast('Payment proof submitted! We will verify shortly.');
+      };
+      reader.readAsDataURL(proofFile);
+    } catch (err) {
+      setProofUploading(false);
+      showToast('Failed to upload proof. Please try again.', 'error');
     }
   };
 
@@ -695,6 +723,147 @@ export default function App() {
         )}
       </AnimatePresence>
       </div>
+      {/* Payment Modal */}
+      <AnimatePresence>
+        {paymentModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 24 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-[#1a1a1a] px-8 py-6 flex items-center justify-between">
+                <div>
+                  <p className="text-green-500 text-[10px] font-bold uppercase tracking-widest mb-1">Complete Your Order</p>
+                  <h3 className="text-white font-black text-lg tracking-tight">{paymentModal.method} Payment</h3>
+                </div>
+                {proofSubmitted && (
+                  <button onClick={() => setPaymentModal(null)} className="text-white/40 hover:text-white transition-colors p-1">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="p-8">
+                {proofSubmitted ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-4">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h4 className="text-xl font-black tracking-tight mb-2">Payment Proof Submitted!</h4>
+                    <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                      We've received your proof of payment. Our team will verify and confirm your order shortly.
+                    </p>
+                    <button
+                      onClick={() => setPaymentModal(null)}
+                      className="bg-green-600 text-white px-8 py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-green-700 transition-all"
+                    >
+                      Done
+                    </button>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Amount */}
+                    <div className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-100">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Amount to Pay</p>
+                      <p className="text-3xl font-black text-red-600">₱{paymentModal.total.toLocaleString()}</p>
+                      <p className="text-[10px] text-gray-400 mt-1 font-mono">Order #{paymentModal.orderId.slice(-8).toUpperCase()}</p>
+                    </div>
+
+                    {/* GCash Details */}
+                    {paymentModal.method === 'GCash' && (
+                      <div className="space-y-4">
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 text-center">
+                          <div className="text-4xl mb-3">📱</div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Send GCash Payment To</p>
+                          <p className="text-2xl font-black text-blue-700 tracking-widest mb-1">0917 123 4567</p>
+                          <p className="text-sm font-bold text-blue-600">NEXUS PC Store</p>
+                          <div className="mt-4 pt-4 border-t border-blue-100">
+                            <p className="text-[10px] text-blue-400 font-medium">Use your Order ID as reference:</p>
+                            <p className="text-sm font-black text-blue-700 font-mono mt-1">#{paymentModal.orderId.slice(-8).toUpperCase()}</p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-400 text-center leading-relaxed">
+                          Send the exact amount then upload your GCash screenshot below.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bank Transfer Details */}
+                    {paymentModal.method === 'Bank Transfer' && (
+                      <div className="space-y-4">
+                        <div className="bg-green-50 border border-green-100 rounded-2xl p-5">
+                          <div className="text-center text-3xl mb-3">🏦</div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-green-600 mb-4 text-center">Bank Account Details</p>
+                          <div className="space-y-3">
+                            {[
+                              { label: 'Bank', value: 'BDO Unibank' },
+                              { label: 'Account Name', value: 'NEXUS PC Store' },
+                              { label: 'Account Number', value: '1234 5678 9012' },
+                              { label: 'Reference', value: `#${paymentModal.orderId.slice(-8).toUpperCase()}` },
+                            ].map((row, i) => (
+                              <div key={i} className="flex justify-between items-center py-2 border-b border-green-100 last:border-0">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{row.label}</span>
+                                <span className="text-sm font-black text-gray-800">{row.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-400 text-center leading-relaxed">
+                          Transfer the exact amount and use your Order ID as reference, then upload your transfer receipt below.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Upload Proof */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Upload Proof of Payment</p>
+                      <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-all ${proofFile ? 'border-green-400 bg-green-50' : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'}`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => setProofFile(e.target.files?.[0] || null)}
+                        />
+                        {proofFile ? (
+                          <>
+                            <CheckCircle2 className="w-8 h-8 text-green-500" />
+                            <p className="text-sm font-bold text-green-700">{proofFile.name}</p>
+                            <p className="text-[10px] text-green-500">Click to change file</p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-3xl">📎</div>
+                            <p className="text-sm font-bold text-gray-500">Click to upload screenshot</p>
+                            <p className="text-[10px] text-gray-400">PNG, JPG, JPEG accepted</p>
+                          </>
+                        )}
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleProofSubmit}
+                      disabled={!proofFile || proofUploading}
+                      className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                    >
+                      {proofUploading ? 'Uploading...' : 'Submit Payment Proof'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Toasts */}
       <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3">
         {toasts.map(toast => (
@@ -1610,6 +1779,8 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
     Shipped: 'bg-blue-100 text-blue-600',
     Cancelled: 'bg-red-100 text-red-600',
     Processing: 'bg-orange-100 text-orange-600',
+    'Awaiting Payment': 'bg-purple-100 text-purple-600',
+    'Payment Submitted': 'bg-indigo-100 text-indigo-600',
     'Refund Requested': 'bg-yellow-100 text-yellow-700',
     'Return & Rejected': 'bg-gray-100 text-gray-600',
   };
