@@ -723,6 +723,7 @@ export default function App() {
         )}
       </AnimatePresence>
       </div>
+      {/* Toasts */}
       {/* Payment Modal */}
       <AnimatePresence>
         {paymentModal && (
@@ -752,7 +753,7 @@ export default function App() {
                 )}
               </div>
 
-              <div className="p-8">
+              <div className="p-8 max-h-[80vh] overflow-y-auto">
                 {proofSubmitted ? (
                   <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-4">
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -780,7 +781,7 @@ export default function App() {
 
                     {/* GCash Details */}
                     {paymentModal.method === 'GCash' && (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 text-center">
                           <div className="text-4xl mb-3">📱</div>
                           <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Send GCash Payment To</p>
@@ -791,15 +792,13 @@ export default function App() {
                             <p className="text-sm font-black text-blue-700 font-mono mt-1">#{paymentModal.orderId.slice(-8).toUpperCase()}</p>
                           </div>
                         </div>
-                        <div className="text-xs text-gray-400 text-center leading-relaxed">
-                          Send the exact amount then upload your GCash screenshot below.
-                        </div>
+                        <p className="text-xs text-gray-400 text-center">Send the exact amount then upload your GCash screenshot below.</p>
                       </div>
                     )}
 
                     {/* Bank Transfer Details */}
                     {paymentModal.method === 'Bank Transfer' && (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         <div className="bg-green-50 border border-green-100 rounded-2xl p-5">
                           <div className="text-center text-3xl mb-3">🏦</div>
                           <p className="text-[10px] font-bold uppercase tracking-widest text-green-600 mb-4 text-center">Bank Account Details</p>
@@ -817,9 +816,7 @@ export default function App() {
                             ))}
                           </div>
                         </div>
-                        <div className="text-xs text-gray-400 text-center leading-relaxed">
-                          Transfer the exact amount and use your Order ID as reference, then upload your transfer receipt below.
-                        </div>
+                        <p className="text-xs text-gray-400 text-center">Transfer the exact amount using your Order ID as reference, then upload your receipt below.</p>
                       </div>
                     )}
 
@@ -836,7 +833,7 @@ export default function App() {
                         {proofFile ? (
                           <>
                             <CheckCircle2 className="w-8 h-8 text-green-500" />
-                            <p className="text-sm font-bold text-green-700">{proofFile.name}</p>
+                            <p className="text-sm font-bold text-green-700 text-center break-all">{proofFile.name}</p>
                             <p className="text-[10px] text-green-500">Click to change file</p>
                           </>
                         ) : (
@@ -864,7 +861,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Toasts */}
       <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3">
         {toasts.map(toast => (
           <motion.div 
@@ -1775,12 +1771,12 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
   };
 
   const statusStyle: Record<string, string> = {
+    'Awaiting Payment': 'bg-purple-100 text-purple-600',
+    'Payment Submitted': 'bg-indigo-100 text-indigo-600',
     Delivered: 'bg-green-100 text-green-600',
     Shipped: 'bg-blue-100 text-blue-600',
     Cancelled: 'bg-red-100 text-red-600',
     Processing: 'bg-orange-100 text-orange-600',
-    'Awaiting Payment': 'bg-purple-100 text-purple-600',
-    'Payment Submitted': 'bg-indigo-100 text-indigo-600',
     'Refund Requested': 'bg-yellow-100 text-yellow-700',
     'Return & Rejected': 'bg-gray-100 text-gray-600',
   };
