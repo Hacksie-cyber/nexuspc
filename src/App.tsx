@@ -1792,6 +1792,26 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
             Cancel Order
           </button>
         );
+      case 'Awaiting Payment':
+        return (
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-purple-600 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg">
+              💳 Complete Your Payment
+            </span>
+            <button
+              onClick={() => setConfirmAction({ orderId: order.id, type: 'cancel' })}
+              className="text-[10px] font-bold uppercase tracking-widest text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all"
+            >
+              Cancel Order
+            </button>
+          </div>
+        );
+      case 'Payment Submitted':
+        return (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg">
+            🔍 Verifying Payment
+          </span>
+        );
       case 'Shipped':
         return (
           <div className="flex flex-wrap gap-2">
@@ -1965,6 +1985,16 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                                 <span className={`text-xs font-bold px-2 py-1 rounded ${statusStyle[order.status] || 'bg-gray-100 text-gray-600'}`}>{order.status}</span>
                               </div>
                             </div>
+                            {order.status === 'Awaiting Payment' && (
+                              <div className="mt-4 p-3 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-700 leading-relaxed">
+                                <strong>Payment required.</strong> Please complete your GCash or Bank Transfer payment to proceed with your order.
+                              </div>
+                            )}
+                            {order.status === 'Payment Submitted' && (
+                              <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-700 leading-relaxed">
+                                <strong>Payment under review.</strong> We received your proof of payment and will verify it within 24 hours.
+                              </div>
+                            )}
                             {order.status === 'Shipped' && (
                               <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-600 leading-relaxed">
                                 <strong>Your order is on the way.</strong> You may request a refund or reject the delivery if needed.
