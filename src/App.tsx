@@ -695,8 +695,22 @@ export default function App() {
                     {paymentModal.method === 'GCash' && (
                       <div className="space-y-3">
                         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 text-center">
-                          <div className="text-4xl mb-3">📱</div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Send GCash Payment To</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Scan to Pay via GCash</p>
+                          {/* GCash QR Code — replace the src with your actual GCash QR image URL */}
+                          <div className="flex justify-center mb-3">
+                            <div className="w-48 h-48 bg-white rounded-xl border-2 border-blue-200 flex items-center justify-center overflow-hidden shadow-md">
+                              <img
+                                src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg"
+                                alt="GCash QR Code"
+                                className="w-full h-full object-contain p-2"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.parentElement!.innerHTML = '<p class="text-xs text-gray-400 p-4">QR code not available.<br/>Use number below.</p>';
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">Or send to this number</p>
                           <p className="text-2xl font-black text-blue-700 tracking-widest mb-1">0917 123 4567</p>
                           <p className="text-sm font-bold text-blue-600">NEXUS PC Store</p>
                           <div className="mt-4 pt-4 border-t border-blue-100">
