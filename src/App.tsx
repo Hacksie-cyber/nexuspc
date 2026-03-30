@@ -768,9 +768,23 @@ export default function App() {
             >
               {/* Header */}
               <div className="bg-[#1a1a1a] px-8 py-6 flex items-center justify-between">
-                <div>
-                  <p className="text-green-500 text-[10px] font-bold uppercase tracking-widest mb-1">Complete Your Order</p>
-                  <h3 className="text-white font-black text-lg tracking-tight">{paymentModal.method} Payment</h3>
+                <div className="flex items-center gap-3">
+                  {!proofSubmitted && (
+                    <button
+                      onClick={() => {
+                        setPaymentModal(null);
+                        setIsCartOpen(true);
+                      }}
+                      className="text-white/40 hover:text-white transition-colors p-1 -ml-1"
+                      title="Back to Cart"
+                    >
+                      <ChevronRight className="w-5 h-5 rotate-180" />
+                    </button>
+                  )}
+                  <div>
+                    <p className="text-green-500 text-[10px] font-bold uppercase tracking-widest mb-1">Complete Your Order</p>
+                    <h3 className="text-white font-black text-lg tracking-tight">{paymentModal.method} Payment</h3>
+                  </div>
                 </div>
                 {proofSubmitted && (
                   <button onClick={() => setPaymentModal(null)} className="text-white/40 hover:text-white transition-colors p-1">
