@@ -1084,6 +1084,23 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                                             <div className="text-sm font-bold text-gray-900">{new Date(order.date).toLocaleString()}</div>
                                           </div>
                                         </div>
+                                        {(order as any).deliveryAddress && (
+                                          <div>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Delivery Address</h4>
+                                            <p className="text-sm text-gray-700 leading-relaxed mb-2">📍 {(order as any).deliveryAddress}</p>
+                                            {(order as any).deliveryLat && (order as any).deliveryLng && (
+                                              <div className="rounded-xl overflow-hidden border border-gray-200 h-40 w-full">
+                                                <iframe
+                                                  title="Delivery Map"
+                                                  width="100%"
+                                                  height="100%"
+                                                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${(order as any).deliveryLng - 0.005},${(order as any).deliveryLat - 0.005},${(order as any).deliveryLng + 0.005},${(order as any).deliveryLat + 0.005}&layer=mapnik&marker=${(order as any).deliveryLat},${(order as any).deliveryLng}`}
+                                                  style={{ border: 0 }}
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </motion.div>
