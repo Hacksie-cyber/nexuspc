@@ -35,5 +35,5 @@ export const CATEGORIES = [
   { id: 'drone', label: 'Drones', icon: '🚁' },
   { id: 'chair', label: 'Chairs', icon: '🪑' },
   { id: 'monitor', label: 'Monitors', icon: '🖥️' },
-  {id: 'other', label: 'Others', icon: ''}
+  {id: 'other', label: 'Others', icon: '📦'}
 ];
