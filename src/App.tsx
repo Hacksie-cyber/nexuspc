@@ -661,12 +661,39 @@ export default function App() {
                     <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
                     <span className="text-2xl font-bold text-red-600">₱{cartTotal.toLocaleString()}</span>
                   </div>
-                  <div className="mb-5">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Delivery Address</p>
+                  <div className="mb-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Delivery Address</p>
 
-                    {/* Map preview */}
+                    {/* Compact: detect button + address on same row */}
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={detectLocation}
+                        disabled={locating}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-widest hover:bg-green-100 transition-all disabled:opacity-50"
+                      >
+                        {locating ? <span className="animate-spin">⏳</span> : <MapPin className="w-3 h-3" />}
+                        {locating ? 'Locating...' : deliveryCoords ? 'Re-detect' : 'Locate Me'}
+                      </button>
+                      <input
+                        type="text"
+                        placeholder="Or type address..."
+                        value={deliveryAddress}
+                        onChange={e => setDeliveryAddress(e.target.value)}
+                        className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 text-[11px] focus:outline-none focus:border-green-500 transition-all"
+                      />
+                    </div>
+
+                    {locError && <p className="text-[10px] text-red-500 mb-1">{locError}</p>}
+
+                    {/* Address text — truncated to 1 line */}
+                    {deliveryAddress && !locError && (
+                      <p className="text-[10px] text-green-600 truncate">📍 {deliveryAddress}</p>
+                    )}
+
+                    {/* Map preview — small, collapsible */}
                     {deliveryCoords && (
-                      <div className="rounded-xl overflow-hidden border border-gray-200 mb-3 h-40 w-full">
+                      <div className="rounded-xl overflow-hidden border border-gray-200 mt-2 h-28 w-full">
                         <iframe
                           title="Delivery Location"
                           width="100%"
@@ -675,33 +702,6 @@ export default function App() {
                           style={{ border: 0 }}
                         />
                       </div>
-                    )}
-
-                    {/* Detect button */}
-                    <button
-                      type="button"
-                      onClick={detectLocation}
-                      disabled={locating}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-xs font-bold uppercase tracking-widest hover:bg-green-100 transition-all disabled:opacity-50 mb-2"
-                    >
-                      {locating ? (
-                        <><span className="animate-spin">⏳</span> Detecting...</>
-                      ) : (
-                        <><MapPin className="w-3.5 h-3.5" /> {deliveryCoords ? 'Re-detect Location' : 'Use My Location'}</>
-                      )}
-                    </button>
-
-                    {/* Manual address input */}
-                    <input
-                      type="text"
-                      placeholder="Or type your address manually..."
-                      value={deliveryAddress}
-                      onChange={e => setDeliveryAddress(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-green-500 transition-all"
-                    />
-                    {locError && <p className="text-[10px] text-red-500 mt-1">{locError}</p>}
-                    {deliveryAddress && !locError && (
-                      <p className="text-[10px] text-green-600 mt-1 leading-relaxed">📍 {deliveryAddress}</p>
                     )}
                   </div>
 
