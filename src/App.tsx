@@ -264,11 +264,12 @@ export default function App() {
 
     try {
       const docRef = await addDoc(collection(db, 'orders'), orderData);
-      setCart([]);
       setIsCartOpen(false);
       if (paymentMethod === 'Cash on Delivery') {
+        setCart([]);
         showToast('Order placed! Pay when your order arrives.');
       } else {
+        // Keep cart intact until user completes payment proof — so back button restores it
         setProofFile(null);
         setProofSubmitted(false);
         setPaymentModal({ orderId: docRef.id, method: paymentMethod, total: cartTotal });
@@ -292,6 +293,7 @@ export default function App() {
         });
         setProofSubmitted(true);
         setProofUploading(false);
+        setCart([]);
         showToast('Payment proof submitted! We will verify shortly.');
       };
       reader.readAsDataURL(proofFile);
@@ -771,7 +773,11 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   {!proofSubmitted && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
+                        // Cancel the pending order in Firestore since user is going back
+                        try {
+                          await updateDoc(doc(db, 'orders', paymentModal.orderId), { status: 'Cancelled' });
+                        } catch {}
                         setPaymentModal(null);
                         setIsCartOpen(true);
                       }}
