@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShoppingCart, Search, User as UserIcon, Menu, X,
@@ -15,11 +15,42 @@ import {
   collection, onSnapshot, query, addDoc, setDoc, doc,
   serverTimestamp, where, updateDoc
 } from 'firebase/firestore';
-import { ErrorBoundary, CartItem, BuildState } from './types';
+import { CartItem, BuildState } from './types';
 import { ProductCard, ProductModal } from './components/ProductCard';
 import {
   HomePage, ShopPage, BuilderPage, ServicesPage, ContactPage, ProfilePage
 } from './pages/Pages';
+
+// Error Boundary
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
+  componentDidCatch(error: any, errorInfo: ErrorInfo) { console.error('ErrorBoundary:', error, errorInfo); }
+  render() {
+    if (this.state.hasError) {
+      let errorMsg = 'Something went wrong.';
+      try { const p = JSON.parse(this.state.error.message); if (p.error) errorMsg = p.error; } catch {}
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-red-100">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <X className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">System Error</h2>
+            <p className="text-gray-500 mb-8 text-sm leading-relaxed">{errorMsg}</p>
+            <button onClick={() => window.location.reload()} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20">
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [page, setPage] = useState('home');
@@ -50,6 +81,10 @@ export default function App() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
   const [proofSubmitted, setProofSubmitted] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState('');
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
@@ -132,8 +167,15 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q) ||
+        (p.description?.toLowerCase().includes(q)) ||
+        p.specs.some(s => s.toLowerCase().includes(q)) ||
+        p.category.toLowerCase().includes(q);
+      // When user is actively searching, ignore category filter so results span all categories
+      const matchesCategory = q ? true : (selectedCategory === 'all' || p.category === selectedCategory);
       const matchesPrice = p.price <= priceRange;
       return matchesSearch && matchesCategory && matchesPrice;
     });
@@ -170,6 +212,31 @@ export default function App() {
     }));
   };
 
+  const detectLocation = () => {
+    if (!navigator.geolocation) { setLocError('Geolocation is not supported by your browser.'); return; }
+    setLocating(true);
+    setLocError('');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setDeliveryCoords({ lat, lng });
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+          const data = await res.json();
+          setDeliveryAddress(data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        } catch {
+          setDeliveryAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
+        setLocating(false);
+      },
+      (err) => {
+        setLocError('Could not get your location. Please allow location access or type your address manually.');
+        setLocating(false);
+      },
+      { timeout: 10000 }
+    );
+  };
+
   const handleCheckout = async () => {
     if (!user) { login(); return; }
     if (cart.length === 0) return;
@@ -184,6 +251,9 @@ export default function App() {
       status: paymentMethod === 'Cash on Delivery' ? 'Processing' : 'Awaiting Payment',
       date: new Date().toISOString(),
       createdAt: serverTimestamp(),
+      deliveryAddress: deliveryAddress || '',
+      deliveryLat: deliveryCoords?.lat || null,
+      deliveryLng: deliveryCoords?.lng || null,
       cartItems: cart.map(item => ({
         id: item.id,
         name: item.name,
@@ -291,7 +361,7 @@ export default function App() {
               placeholder="Search components, laptops..." 
               className="w-full bg-white/10 border border-white/20 rounded-md py-2 px-4 pl-10 text-sm focus:bg-white focus:text-black focus:outline-none transition-all"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); if (e.target.value) setSelectedCategory('all'); }}
               onFocus={() => page !== 'shop' && navigate('shop')}
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-white/40 group-focus-within:text-black/40" />
@@ -591,6 +661,50 @@ export default function App() {
                     <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
                     <span className="text-2xl font-bold text-red-600">₱{cartTotal.toLocaleString()}</span>
                   </div>
+                  <div className="mb-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Delivery Address</p>
+
+                    {/* Map preview */}
+                    {deliveryCoords && (
+                      <div className="rounded-xl overflow-hidden border border-gray-200 mb-3 h-40 w-full">
+                        <iframe
+                          title="Delivery Location"
+                          width="100%"
+                          height="100%"
+                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${deliveryCoords.lng - 0.005},${deliveryCoords.lat - 0.005},${deliveryCoords.lng + 0.005},${deliveryCoords.lat + 0.005}&layer=mapnik&marker=${deliveryCoords.lat},${deliveryCoords.lng}`}
+                          style={{ border: 0 }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Detect button */}
+                    <button
+                      type="button"
+                      onClick={detectLocation}
+                      disabled={locating}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-xs font-bold uppercase tracking-widest hover:bg-green-100 transition-all disabled:opacity-50 mb-2"
+                    >
+                      {locating ? (
+                        <><span className="animate-spin">⏳</span> Detecting...</>
+                      ) : (
+                        <><MapPin className="w-3.5 h-3.5" /> {deliveryCoords ? 'Re-detect Location' : 'Use My Location'}</>
+                      )}
+                    </button>
+
+                    {/* Manual address input */}
+                    <input
+                      type="text"
+                      placeholder="Or type your address manually..."
+                      value={deliveryAddress}
+                      onChange={e => setDeliveryAddress(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-green-500 transition-all"
+                    />
+                    {locError && <p className="text-[10px] text-red-500 mt-1">{locError}</p>}
+                    {deliveryAddress && !locError && (
+                      <p className="text-[10px] text-green-600 mt-1 leading-relaxed">📍 {deliveryAddress}</p>
+                    )}
+                  </div>
+
                   <div className="mb-5">
                     <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</p>
                     <div className="grid grid-cols-3 gap-2">
