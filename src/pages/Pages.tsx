@@ -594,7 +594,7 @@ function ServicesPage({ user, navigate, login }: { user: any, navigate: (p: stri
         customer: form.name,
         email: form.email,
         phone: form.phone,
-        service: bookingService,
+        services: bookingService,
         date: form.date,
         time: form.time,
         notes: form.notes || '',
