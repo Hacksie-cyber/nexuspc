@@ -223,7 +223,6 @@ export default function App() {
       return item;
     }));
   };
-  };
 
   const detectLocation = () => {
     if (!navigator.geolocation) { setLocError('Geolocation is not supported by your browser.'); return; }
