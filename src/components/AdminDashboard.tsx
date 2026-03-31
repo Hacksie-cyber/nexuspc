@@ -748,7 +748,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {orders.slice(0, 5).map(order => (
+                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5).map(order => (
                           <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
                             <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
                             <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.customer}</td>
@@ -1005,7 +1005,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {orders.map(order => (
+                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(order => (
                           <React.Fragment key={order.id}>
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
