@@ -71,6 +71,40 @@ export function CatalogTab({ activeTab, products, showToast, setActiveTab }: Cat
     }
   };
 
+  const handleUpdateStock = async (id: number, newStock: number) => {
+    if (newStock < 0) return;
+    try {
+      await updateDoc(doc(db, 'products', id.toString()), { stock: newStock });
+      showToast('Stock updated');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
+    }
+  };
+
+  const handleExportInventory = () => {
+    const rows = [
+      ['SKU', 'Name', 'Category', 'Brand', 'Price', 'Stock', 'Status'],
+      ...products.map(p => [
+        `NPC-${p.category.toUpperCase().slice(0, 3)}-${p.id.toString().padStart(4, '0')}`,
+        p.name,
+        p.category,
+        p.brand,
+        p.price.toString(),
+        p.stock.toString(),
+        p.stock === 0 ? 'Out of Stock' : p.stock <= 5 ? 'Low Stock' : 'In Stock',
+      ])
+    ];
+    const csv = rows.map(r => r.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nexuspc-inventory-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Inventory exported as CSV');
+  };
+
   return (
     <>
         {/* Edit Product Modal */}
@@ -277,7 +311,10 @@ export function CatalogTab({ activeTab, products, showToast, setActiveTab }: Cat
               </motion.div>
             </div>
           )}
+        </AnimatePresence>
 
+        {/* Page Content */}
+        <div className="p-8 flex-1">
             {activeTab === 'products' && (
               <motion.div 
                 key="products"
