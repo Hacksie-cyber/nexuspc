@@ -118,6 +118,7 @@ const fmt = (n: number) => '₱' + n.toLocaleString();
 
 export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [statPeriod, setStatPeriod] = useState<'week' | 'month' | 'year'>('week');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -126,8 +127,6 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [catFilter, setCatFilter] = useState('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
-  const [customerSearch, setCustomerSearch] = useState('');
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
 
   // New Product Form State
@@ -184,21 +183,70 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   };
 
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((acc, o) => acc + o.total, 0);
-    const lowStockCount = products.filter(p => p.stock <= 5).length;
-    const pendingOrders = orders.filter(o => o.status === 'Processing').length;
-    
-    // Revenue by day for chart
-    const revenueByDay: { [key: string]: number } = {};
-    orders.forEach(o => {
-      const date = new Date(o.date).toLocaleDateString('en-US', { weekday: 'short' });
-      revenueByDay[date] = (revenueByDay[date] || 0) + o.total;
-    });
+    const now = new Date();
 
-    const chartData = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => ({
-      name: day,
-      revenue: revenueByDay[day] || 0
-    }));
+    // Date filter based on period
+    const filterByPeriod = (dateStr: string) => {
+      const d = new Date(dateStr);
+      if (statPeriod === 'week') {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        return d >= startOfWeek;
+      }
+      if (statPeriod === 'month') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }
+      if (statPeriod === 'year') {
+        return d.getFullYear() === now.getFullYear();
+      }
+      return true;
+    };
+
+    const filteredOrders = orders.filter(o => filterByPeriod(o.date));
+    const totalRevenue = filteredOrders.reduce((acc, o) => acc + o.total, 0);
+    const lowStockCount = products.filter(p => p.stock <= 5).length;
+    const pendingOrders = filteredOrders.filter(o => o.status === 'Processing').length;
+    const avgOrderValue = filteredOrders.length > 0 ? Math.round(totalRevenue / filteredOrders.length) : 0;
+
+    // Chart data — changes per period
+    let chartData: { name: string; revenue: number; orders: number }[] = [];
+
+    if (statPeriod === 'week') {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const byDay: { [k: string]: { revenue: number; orders: number } } = {};
+      filteredOrders.forEach(o => {
+        const d = days[new Date(o.date).getDay()];
+        if (!byDay[d]) byDay[d] = { revenue: 0, orders: 0 };
+        byDay[d].revenue += o.total;
+        byDay[d].orders += 1;
+      });
+      chartData = days.map(d => ({ name: d, revenue: byDay[d]?.revenue || 0, orders: byDay[d]?.orders || 0 }));
+    } else if (statPeriod === 'month') {
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const byDay: { [k: number]: { revenue: number; orders: number } } = {};
+      filteredOrders.forEach(o => {
+        const day = new Date(o.date).getDate();
+        if (!byDay[day]) byDay[day] = { revenue: 0, orders: 0 };
+        byDay[day].revenue += o.total;
+        byDay[day].orders += 1;
+      });
+      chartData = Array.from({ length: daysInMonth }, (_, i) => ({
+        name: (i + 1).toString(),
+        revenue: byDay[i + 1]?.revenue || 0,
+        orders: byDay[i + 1]?.orders || 0,
+      }));
+    } else if (statPeriod === 'year') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const byMonth: { [k: number]: { revenue: number; orders: number } } = {};
+      filteredOrders.forEach(o => {
+        const m = new Date(o.date).getMonth();
+        if (!byMonth[m]) byMonth[m] = { revenue: 0, orders: 0 };
+        byMonth[m].revenue += o.total;
+        byMonth[m].orders += 1;
+      });
+      chartData = months.map((m, i) => ({ name: m, revenue: byMonth[i]?.revenue || 0, orders: byMonth[i]?.orders || 0 }));
+    }
 
     // Category distribution
     const catData = CATEGORIES.filter(c => c.id !== 'all').map(cat => ({
@@ -208,15 +256,16 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
 
     return {
       revenue: totalRevenue,
-      orders: orders.length,
+      orders: filteredOrders.length,
       products: products.length,
       customers: users.length,
       lowStock: lowStockCount,
       pending: pendingOrders,
+      avgOrderValue,
       chartData,
-      catData
+      catData,
     };
-  }, [products, orders, users]);
+  }, [products, orders, users, statPeriod]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -664,13 +713,34 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-8"
               >
+                {/* Period Selector */}
+                <div className="flex items-center gap-2 bg-gray-100 rounded-xl p-1">
+                  {([
+                    { key: 'week', label: 'This Week' },
+                    { key: 'month', label: 'This Month' },
+                    { key: 'year', label: 'This Year' },
+                  ] as const).map(p => (
+                    <button
+                      key={p.key}
+                      onClick={() => setStatPeriod(p.key)}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                        statPeriod === p.key
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <StatCard icon={<TrendingUp />} label="Total Revenue" value={fmt(stats.revenue)} trend="+12.4%" color="green" />
-                  <StatCard icon={<ShoppingCart />} label="Total Orders" value={stats.orders.toString()} trend="+8 today" color="blue" />
-                  <StatCard icon={<Package />} label="Products" value={stats.products.toString()} trend="+32 added" color="orange" />
-                  <StatCard icon={<Users />} label="Customers" value={stats.customers.toString()} trend="+14 new" color="purple" />
-                  <StatCard icon={<AlertTriangle />} label="Low Stock" value={stats.lowStock.toString()} trend="+2 today" color="red" />
+                  <StatCard icon={<TrendingUp />} label="Revenue" value={fmt(stats.revenue)} trend={statPeriod === 'week' ? 'This week' : statPeriod === 'month' ? 'This month' : 'This year'} color="green" />
+                  <StatCard icon={<ShoppingCart />} label="Orders" value={stats.orders.toString()} trend={statPeriod === 'week' ? 'This week' : statPeriod === 'month' ? 'This month' : 'This year'} color="blue" />
+                  <StatCard icon={<Package />} label="Products" value={stats.products.toString()} trend="Total in store" color="orange" />
+                  <StatCard icon={<Users />} label="Customers" value={stats.customers.toString()} trend="Total registered" color="purple" />
+                  <StatCard icon={<AlertTriangle />} label="Low Stock" value={stats.lowStock.toString()} trend="≤5 units left" color="red" />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -678,8 +748,12 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                   <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                     <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                       <div>
-                        <h3 className="font-bold text-gray-900">Revenue — Weekly Overview</h3>
-                        <p className="text-xs text-gray-400">Daily sales totals from Firestore</p>
+                        <h3 className="font-bold text-gray-900">
+                          Revenue — {statPeriod === 'week' ? 'This Week' : statPeriod === 'month' ? 'This Month' : 'This Year'}
+                        </h3>
+                        <p className="text-xs text-gray-400">
+                          {statPeriod === 'week' ? 'Daily totals for the current week' : statPeriod === 'month' ? 'Daily totals for the current month' : 'Monthly totals for the current year'}
+                        </p>
                       </div>
                     </div>
                     <div className="p-6 h-64">
@@ -721,12 +795,18 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                       <h3 className="font-bold text-gray-900">Quick Summary</h3>
                     </div>
                     <div className="p-6 space-y-4">
-                      <SummaryRow label="Avg. Order Value" value="₱1,937" />
-                      <SummaryRow label="Conversion Rate" value="3.4%" />
+                      <SummaryRow label="Period" value={statPeriod === 'week' ? 'This Week' : statPeriod === 'month' ? 'This Month' : 'This Year'} />
+                      <SummaryRow label="Total Revenue" value={fmt(stats.revenue)} />
+                      <SummaryRow label="Total Orders" value={stats.orders.toString()} />
+                      <SummaryRow label="Avg. Order Value" value={fmt(stats.avgOrderValue)} />
                       <SummaryRow label="Pending Orders" value={stats.pending.toString()} />
-                      <SummaryRow label="Shipped Today" value="11" />
-                      <SummaryRow label="Returns This Month" value="2" />
-                      <SummaryRow label="Revenue This Month" value={fmt(stats.revenue)} />
+                      <SummaryRow label="New Customers" value={users.filter(u => {
+                        const d = new Date(u.joined);
+                        const now = new Date();
+                        if (statPeriod === 'week') { const s = new Date(now); s.setDate(now.getDate() - now.getDay()); s.setHours(0,0,0,0); return d >= s; }
+                        if (statPeriod === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+                        return d.getFullYear() === now.getFullYear();
+                      }).length.toString()} />
                     </div>
                   </div>
                 </div>
@@ -1119,16 +1199,52 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
             )}
 
             {activeTab === 'analytics' && (
-              <motion.div 
+              <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-8"
               >
+                {/* Period Selector */}
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
+                    <p className="text-sm text-gray-400">Performance data for the selected period</p>
+                  </div>
+                  <div className="flex items-center gap-2 bg-gray-100 rounded-xl p-1">
+                    {([
+                      { key: 'week', label: 'This Week' },
+                      { key: 'month', label: 'This Month' },
+                      { key: 'year', label: 'This Year' },
+                    ] as const).map(p => (
+                      <button
+                        key={p.key}
+                        onClick={() => setStatPeriod(p.key)}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                          statPeriod === p.key
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard icon={<TrendingUp />} label="Revenue" value={fmt(stats.revenue)} trend={statPeriod === 'week' ? 'This week' : statPeriod === 'month' ? 'This month' : 'This year'} color="green" />
+                  <StatCard icon={<ShoppingCart />} label="Orders" value={stats.orders.toString()} trend={statPeriod === 'week' ? 'This week' : statPeriod === 'month' ? 'This month' : 'This year'} color="blue" />
+                  <StatCard icon={<Users />} label="Customers" value={stats.customers.toString()} trend="Total registered" color="purple" />
+                  <StatCard icon={<Package />} label="Avg. Order" value={fmt(stats.avgOrderValue)} trend="Per transaction" color="orange" />
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm">
-                    <h3 className="font-bold text-gray-900 mb-6">Revenue Growth</h3>
+                    <h3 className="font-bold text-gray-900 mb-1">Revenue Growth</h3>
+                    <p className="text-xs text-gray-400 mb-6">{statPeriod === 'week' ? 'Daily revenue this week' : statPeriod === 'month' ? 'Daily revenue this month' : 'Monthly revenue this year'}</p>
                     <div className="h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={stats.chartData}>
@@ -1178,235 +1294,52 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
             )}
 
             {activeTab === 'customers' && (
-              <motion.div
+              <motion.div 
                 key="customers"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
-                {/* Customer Detail Panel */}
-                {selectedCustomer ? (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                    {/* Back button + header */}
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => setSelectedCustomer(null)}
-                        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
-                      >
-                        <ChevronRight className="w-4 h-4 rotate-180" /> Back to Customers
-                      </button>
-                    </div>
-
-                    {/* Profile card */}
-                    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center gap-6">
-                      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-2xl font-bold text-green-700 shrink-0">
-                        {selectedCustomer.name.charAt(0)}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 flex-wrap mb-1">
-                          <h2 className="text-xl font-bold text-gray-900">{selectedCustomer.name}</h2>
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            selectedCustomer.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                          }`}>{selectedCustomer.role}</span>
-                        </div>
-                        <p className="text-sm text-gray-500">{selectedCustomer.email}</p>
-                        <p className="text-xs text-gray-400 mt-1">Joined {new Date(selectedCustomer.joined).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 shrink-0">
-                        {[
-                          { label: 'Orders', value: orders.filter(o => o.uid === selectedCustomer.uid).length },
-                          { label: 'Bookings', value: bookings.filter(b => b.uid === selectedCustomer.uid).length },
-                          { label: 'Total Spent', value: '₱' + orders.filter(o => o.uid === selectedCustomer.uid).reduce((sum, o) => sum + o.total, 0).toLocaleString() },
-                        ].map((stat, i) => (
-                          <div key={i} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">{stat.label}</div>
-                            <div className="text-lg font-bold text-gray-900">{stat.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Order History */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
-                        <ShoppingCart size={16} className="text-green-600" />
-                        <h3 className="font-bold text-gray-900">Order History</h3>
-                        <span className="ml-auto text-xs font-bold text-gray-400">{orders.filter(o => o.uid === selectedCustomer.uid).length} orders</span>
-                      </div>
-                      {orders.filter(o => o.uid === selectedCustomer.uid).length === 0 ? (
-                        <div className="py-12 text-center text-gray-400">
-                          <ShoppingCart size={32} className="mx-auto mb-3 opacity-20" />
-                          <p className="text-sm font-medium">No orders yet.</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {orders.filter(o => o.uid === selectedCustomer.uid)
-                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map(order => (
-                              <div key={order.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                                    <span className="font-mono text-sm font-bold text-green-600">{order.id.slice(-8).toUpperCase()}</span>
-                                    <StatusBadge status={order.status} />
-                                  </div>
-                                  <div className="text-xs text-gray-400">{new Date(order.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })} · {order.items} item{order.items > 1 ? 's' : ''} · {order.payment}</div>
-                                  {order.cartItems && order.cartItems.length > 0 && (
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                      {order.cartItems.slice(0, 3).map((item: any, i: number) => (
-                                        <span key={i} className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-medium">{item.name}</span>
-                                      ))}
-                                      {order.cartItems.length > 3 && <span className="text-[10px] text-gray-400">+{order.cartItems.length - 3} more</span>}
-                                    </div>
-                                  )}
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Customer</th>
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Email</th>
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Joined</th>
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">UID</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {users.map(user => (
+                          <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
+                                  {user.name.charAt(0)}
                                 </div>
-                                <div className="shrink-0 text-right">
-                                  <div className="text-sm font-bold text-gray-900">₱{order.total.toLocaleString()}</div>
-                                </div>
+                                <div className="font-bold text-sm text-gray-900">{user.name}</div>
                               </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Booking History */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
-                        <Clock size={16} className="text-green-600" />
-                        <h3 className="font-bold text-gray-900">Booking History</h3>
-                        <span className="ml-auto text-xs font-bold text-gray-400">{bookings.filter(b => b.uid === selectedCustomer.uid).length} bookings</span>
-                      </div>
-                      {bookings.filter(b => b.uid === selectedCustomer.uid).length === 0 ? (
-                        <div className="py-12 text-center text-gray-400">
-                          <Clock size={32} className="mx-auto mb-3 opacity-20" />
-                          <p className="text-sm font-medium">No bookings yet.</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {bookings.filter(b => b.uid === selectedCustomer.uid)
-                            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map(booking => (
-                              <div key={booking.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center text-base shrink-0">
-                                  {booking.service === 'Custom PC Building' ? '🖥️' : booking.service === 'Repair & Diagnosis' ? '🔧' : booking.service === 'Hardware Upgrade' ? '⬆️' : '💬'}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                                    <span className="text-sm font-bold text-gray-900">{booking.service}</span>
-                                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                                      booking.status === 'Pending' ? 'bg-orange-100 text-orange-600'
-                                      : booking.status === 'Accepted' ? 'bg-green-100 text-green-600'
-                                      : 'bg-red-100 text-red-500'
-                                    }`}>{booking.status}</span>
-                                  </div>
-                                  <p className="text-xs text-gray-400">📅 {booking.date} at {booking.time}</p>
-                                  {booking.notes && <p className="text-xs text-gray-400 italic mt-0.5">"{booking.notes}"</p>}
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  <div className="text-xs text-gray-400">{booking.phone}</div>
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                ) : (
-                  /* Customer List */
-                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                    {/* Search Bar */}
-                    <div className="px-6 py-4 border-b border-gray-100">
-                      <div className="relative">
-                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search by name or email..."
-                          value={customerSearch}
-                          onChange={e => setCustomerSearch(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 transition-all"
-                        />
-                        {customerSearch && (
-                          <button
-                            onClick={() => setCustomerSearch('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-gray-50/50">
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Customer</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Email</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Joined</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Orders</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Bookings</th>
-                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Action</th>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-400">{new Date(user.joined).toLocaleDateString()}</td>
+                            <td className="px-6 py-4 font-mono text-[10px] text-gray-300">{user.uid}</td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {users
-                            .filter(u =>
-                              u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                              u.email.toLowerCase().includes(customerSearch.toLowerCase())
-                            )
-                            .map(user => (
-                            <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">
-                                    {user.name.charAt(0)}
-                                  </div>
-                                  <div className="font-bold text-sm text-gray-900">{user.name}</div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
-                              <td className="px-6 py-4">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                  user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                                }`}>{user.role}</span>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-400">{new Date(user.joined).toLocaleDateString()}</td>
-                              <td className="px-6 py-4 text-sm font-bold text-gray-700">{orders.filter(o => o.uid === user.uid).length}</td>
-                              <td className="px-6 py-4 text-sm font-bold text-gray-700">{bookings.filter(b => b.uid === user.uid).length}</td>
-                              <td className="px-6 py-4">
-                                <button
-                                  onClick={() => setSelectedCustomer(user)}
-                                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-600 hover:text-green-700 border border-green-200 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-all"
-                                >
-                                  View History <ChevronRight className="w-3 h-3" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {users.filter(u =>
-                            u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                            u.email.toLowerCase().includes(customerSearch.toLowerCase())
-                          ).length === 0 && (
-                            <tr>
-                              <td colSpan={7} className="px-6 py-16 text-center text-gray-400">
-                                <Users size={32} className="mx-auto mb-3 opacity-20" />
-                                <p className="text-sm font-medium">No customers match "{customerSearch}"</p>
-                                <button onClick={() => setCustomerSearch('')} className="mt-2 text-green-600 text-xs font-bold hover:underline">Clear search</button>
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    {customerSearch && (
-                      <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
-                        <p className="text-xs text-gray-400">
-                          Showing <span className="font-bold text-gray-600">{users.filter(u => u.name.toLowerCase().includes(customerSearch.toLowerCase()) || u.email.toLowerCase().includes(customerSearch.toLowerCase())).length}</span> of <span className="font-bold text-gray-600">{users.length}</span> customers
-                        </p>
-                      </div>
-                    )}
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
+                </div>
               </motion.div>
             )}
 
