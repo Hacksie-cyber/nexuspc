@@ -126,7 +126,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [catFilter, setCatFilter] = useState('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [visibleOrders, setVisibleOrders] = useState(10);
+  const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
 
   // New Product Form State
@@ -385,7 +385,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
               icon={<ShoppingCart size={18} />} 
               label="Orders" 
               active={activeTab === 'orders'} 
-              onClick={() => { setActiveTab('orders'); setVisibleOrders(10); }} 
+              onClick={() => setActiveTab('orders')} 
               badge={stats.pending > 0 ? stats.pending : undefined}
             />
             <SidebarItem
@@ -1006,7 +1006,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, visibleOrders).map(order => (
+                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(order => (
                           <React.Fragment key={order.id}>
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
@@ -1113,41 +1113,6 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                       </tbody>
                     </table>
                   </div>
-
-                  {/* View More / View Less footer */}
-                  {orders.length > 10 && (
-                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-                      <p className="text-xs text-gray-400">
-                        Showing <span className="font-bold text-gray-700">{Math.min(visibleOrders, orders.length)}</span> of <span className="font-bold text-gray-700">{orders.length}</span> orders
-                      </p>
-                      <div className="flex gap-3">
-                        {visibleOrders < orders.length && (
-                          <button
-                            onClick={() => setVisibleOrders(prev => prev + 10)}
-                            className="text-xs font-bold uppercase tracking-widest text-green-600 hover:text-green-700 border border-green-200 bg-green-50 hover:bg-green-100 px-4 py-2 rounded-lg transition-all"
-                          >
-                            View More (+10)
-                          </button>
-                        )}
-                        {visibleOrders < orders.length && (
-                          <button
-                            onClick={() => setVisibleOrders(orders.length)}
-                            className="text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-700 border border-gray-200 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-lg transition-all"
-                          >
-                            View All
-                          </button>
-                        )}
-                        {visibleOrders > 10 && (
-                          <button
-                            onClick={() => setVisibleOrders(10)}
-                            className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 px-4 py-2 rounded-lg transition-all"
-                          >
-                            Collapse
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </motion.div>
             )}
@@ -1212,52 +1177,190 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
             )}
 
             {activeTab === 'customers' && (
-              <motion.div 
+              <motion.div
                 key="customers"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
-                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50/50">
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Customer</th>
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Email</th>
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Joined</th>
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">UID</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {users.map(user => (
-                          <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
-                                  {user.name.charAt(0)}
-                                </div>
-                                <div className="font-bold text-sm text-gray-900">{user.name}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
-                            <td className="px-6 py-4">
-                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                              }`}>
-                                {user.role}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-400">{new Date(user.joined).toLocaleDateString()}</td>
-                            <td className="px-6 py-4 font-mono text-[10px] text-gray-300">{user.uid}</td>
-                          </tr>
+                {/* Customer Detail Panel */}
+                {selectedCustomer ? (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                    {/* Back button + header */}
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => setSelectedCustomer(null)}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+                      >
+                        <ChevronRight className="w-4 h-4 rotate-180" /> Back to Customers
+                      </button>
+                    </div>
+
+                    {/* Profile card */}
+                    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center gap-6">
+                      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-2xl font-bold text-green-700 shrink-0">
+                        {selectedCustomer.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 flex-wrap mb-1">
+                          <h2 className="text-xl font-bold text-gray-900">{selectedCustomer.name}</h2>
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            selectedCustomer.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                          }`}>{selectedCustomer.role}</span>
+                        </div>
+                        <p className="text-sm text-gray-500">{selectedCustomer.email}</p>
+                        <p className="text-xs text-gray-400 mt-1">Joined {new Date(selectedCustomer.joined).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 shrink-0">
+                        {[
+                          { label: 'Orders', value: orders.filter(o => o.uid === selectedCustomer.uid).length },
+                          { label: 'Bookings', value: bookings.filter(b => b.uid === selectedCustomer.uid).length },
+                          { label: 'Total Spent', value: '₱' + orders.filter(o => o.uid === selectedCustomer.uid).reduce((sum, o) => sum + o.total, 0).toLocaleString() },
+                        ].map((stat, i) => (
+                          <div key={i} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">{stat.label}</div>
+                            <div className="text-lg font-bold text-gray-900">{stat.value}</div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </div>
+
+                    {/* Order History */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                        <ShoppingCart size={16} className="text-green-600" />
+                        <h3 className="font-bold text-gray-900">Order History</h3>
+                        <span className="ml-auto text-xs font-bold text-gray-400">{orders.filter(o => o.uid === selectedCustomer.uid).length} orders</span>
+                      </div>
+                      {orders.filter(o => o.uid === selectedCustomer.uid).length === 0 ? (
+                        <div className="py-12 text-center text-gray-400">
+                          <ShoppingCart size={32} className="mx-auto mb-3 opacity-20" />
+                          <p className="text-sm font-medium">No orders yet.</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {orders.filter(o => o.uid === selectedCustomer.uid)
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .map(order => (
+                              <div key={order.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                                    <span className="font-mono text-sm font-bold text-green-600">{order.id.slice(-8).toUpperCase()}</span>
+                                    <StatusBadge status={order.status} />
+                                  </div>
+                                  <div className="text-xs text-gray-400">{new Date(order.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })} · {order.items} item{order.items > 1 ? 's' : ''} · {order.payment}</div>
+                                  {order.cartItems && order.cartItems.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {order.cartItems.slice(0, 3).map((item: any, i: number) => (
+                                        <span key={i} className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-medium">{item.name}</span>
+                                      ))}
+                                      {order.cartItems.length > 3 && <span className="text-[10px] text-gray-400">+{order.cartItems.length - 3} more</span>}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-sm font-bold text-gray-900">₱{order.total.toLocaleString()}</div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Booking History */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                        <Clock size={16} className="text-green-600" />
+                        <h3 className="font-bold text-gray-900">Booking History</h3>
+                        <span className="ml-auto text-xs font-bold text-gray-400">{bookings.filter(b => b.uid === selectedCustomer.uid).length} bookings</span>
+                      </div>
+                      {bookings.filter(b => b.uid === selectedCustomer.uid).length === 0 ? (
+                        <div className="py-12 text-center text-gray-400">
+                          <Clock size={32} className="mx-auto mb-3 opacity-20" />
+                          <p className="text-sm font-medium">No bookings yet.</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {bookings.filter(b => b.uid === selectedCustomer.uid)
+                            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .map(booking => (
+                              <div key={booking.id} className="px-6 py-4 flex flex-col md:flex-row md:items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center text-base shrink-0">
+                                  {booking.service === 'Custom PC Building' ? '🖥️' : booking.service === 'Repair & Diagnosis' ? '🔧' : booking.service === 'Hardware Upgrade' ? '⬆️' : '💬'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                    <span className="text-sm font-bold text-gray-900">{booking.service}</span>
+                                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                                      booking.status === 'Pending' ? 'bg-orange-100 text-orange-600'
+                                      : booking.status === 'Accepted' ? 'bg-green-100 text-green-600'
+                                      : 'bg-red-100 text-red-500'
+                                    }`}>{booking.status}</span>
+                                  </div>
+                                  <p className="text-xs text-gray-400">📅 {booking.date} at {booking.time}</p>
+                                  {booking.notes && <p className="text-xs text-gray-400 italic mt-0.5">"{booking.notes}"</p>}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-xs text-gray-400">{booking.phone}</div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  /* Customer List */
+                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/50">
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Customer</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Email</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Joined</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Orders</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Bookings</th>
+                            <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {users.map(user => (
+                            <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">
+                                    {user.name.charAt(0)}
+                                  </div>
+                                  <div className="font-bold text-sm text-gray-900">{user.name}</div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                  user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                                }`}>{user.role}</span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-400">{new Date(user.joined).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 text-sm font-bold text-gray-700">{orders.filter(o => o.uid === user.uid).length}</td>
+                              <td className="px-6 py-4 text-sm font-bold text-gray-700">{bookings.filter(b => b.uid === user.uid).length}</td>
+                              <td className="px-6 py-4">
+                                <button
+                                  onClick={() => setSelectedCustomer(user)}
+                                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-600 hover:text-green-700 border border-green-200 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-all"
+                                >
+                                  View History <ChevronRight className="w-3 h-3" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             )}
 
