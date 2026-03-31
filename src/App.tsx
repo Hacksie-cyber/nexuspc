@@ -772,7 +772,6 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  </div>
 
                   <div className="mb-5">
                     <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</p>
