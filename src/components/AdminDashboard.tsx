@@ -69,7 +69,8 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
     const catData = CATEGORIES.filter(c => c.id !== 'all').map(cat => ({
       name: cat.label, value: products.filter(p => p.category === cat.id).length
     }));
-    return { revenue: totalRevenue, orders: orders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, chartData, catData };
+    const avgOrderValue = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
+    return { revenue: totalRevenue, orders: orders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, avgOrderValue, chartData, catData };
   }, [products, orders, users]);
 
   // ── Tab group helper ─────────────────────────────────────────────
@@ -163,7 +164,9 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                 <OverviewTab
                   activeTab={activeTab as 'dashboard' | 'analytics'}
                   stats={stats} orders={orders} products={products}
+                  users={users}
                   statPeriod={statPeriod} setStatPeriod={setStatPeriod}
+                  setActiveTab={setActiveTab}
                 />
               </motion.div>
             )}
