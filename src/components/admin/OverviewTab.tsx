@@ -13,11 +13,13 @@ interface OverviewTabProps {
   stats: any;
   orders: Order[];
   products: Product[];
+  users: { uid: string; name: string; email: string; role: string; joined: string }[];
   statPeriod: 'week' | 'month' | 'year';
   setStatPeriod: (p: 'week' | 'month' | 'year') => void;
+  setActiveTab: (tab: string) => void;
 }
 
-export function OverviewTab({ activeTab, stats, orders, products, statPeriod, setStatPeriod }: OverviewTabProps) {
+export function OverviewTab({ activeTab, stats, orders, products, users, statPeriod, setStatPeriod, setActiveTab }: OverviewTabProps) {
   return (
     <>
             {activeTab === 'dashboard' && (
