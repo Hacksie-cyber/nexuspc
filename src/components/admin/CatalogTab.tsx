@@ -277,10 +277,7 @@ export function CatalogTab({ activeTab, products, showToast, setActiveTab }: Cat
               </motion.div>
             </div>
           )}
-        </AnimatePresence>
 
-        {/* Page Content */}
-        <div className="p-8 flex-1">
             {activeTab === 'products' && (
               <motion.div 
                 key="products"
