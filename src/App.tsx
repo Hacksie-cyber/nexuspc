@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import {
   collection, onSnapshot, query, addDoc, setDoc, doc,
-  serverTimestamp, where, updateDoc
+  serverTimestamp, where, updateDoc, writeBatch, increment
 } from 'firebase/firestore';
 import { CartItem, BuildState } from './types';
 import { ProductCard, ProductModal } from './components/ProductCard';
@@ -188,9 +188,17 @@ export default function App() {
 
   // Actions
   const addToCart = (product: Product) => {
+    if (product.stock <= 0) {
+      showToast(`"${product.name}" is out of stock.`, 'error');
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
+        if (existing.qty >= product.stock) {
+          showToast(`Only ${product.stock} unit${product.stock > 1 ? 's' : ''} of "${product.name}" available.`, 'error');
+          return prev;
+        }
         return prev.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
       }
       return [...prev, { ...product, qty: 1 }];
@@ -206,10 +214,15 @@ export default function App() {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQty = Math.max(1, item.qty + delta);
+        if (newQty > item.stock) {
+          showToast(`Only ${item.stock} unit${item.stock > 1 ? 's' : ''} of "${item.name}" available.`, 'error');
+          return { ...item, qty: item.stock };
+        }
         return { ...item, qty: newQty };
       }
       return item;
     }));
+  };
   };
 
   const detectLocation = () => {
@@ -229,7 +242,7 @@ export default function App() {
         }
         setLocating(false);
       },
-      (err) => {
+      () => {
         setLocError('Could not get your location. Please allow location access or type your address manually.');
         setLocating(false);
       },
@@ -242,6 +255,22 @@ export default function App() {
     if (cart.length === 0) return;
     if (!deliveryAddress.trim()) {
       showToast('Please enter your delivery address.', 'error');
+      return;
+    }
+
+    // Check stock against latest product data from Firestore
+    const outOfStock = cart.filter(item => {
+      const liveProduct = products.find(p => p.id === item.id);
+      return !liveProduct || liveProduct.stock < item.qty;
+    });
+    if (outOfStock.length > 0) {
+      const names = outOfStock.map(i => {
+        const live = products.find(p => p.id === i.id);
+        return live && live.stock > 0
+          ? `"${i.name}" (only ${live.stock} left)`
+          : `"${i.name}" (out of stock)`;
+      }).join(', ');
+      showToast(`Stock issue: ${names}. Please update your cart.`, 'error');
       return;
     }
 
@@ -267,16 +296,29 @@ export default function App() {
     };
 
     try {
-      const docRef = await addDoc(collection(db, 'orders'), orderData);
+      const batch = writeBatch(db);
+
+      // 1. Create the order document
+      const orderRef = doc(collection(db, 'orders'));
+      batch.set(orderRef, orderData);
+
+      // 2. Deduct stock for each cart item
+      cart.forEach(item => {
+        const productRef = doc(db, 'products', item.id.toString());
+        batch.update(productRef, { stock: increment(-item.qty) });
+      });
+
+      // Commit both atomically
+      await batch.commit();
+
       setIsCartOpen(false);
       if (paymentMethod === 'Cash on Delivery') {
         setCart([]);
         showToast('Order placed! Pay when your order arrives.');
       } else {
-        // Keep cart intact until user completes payment proof — so back button restores it
         setProofFile(null);
         setProofSubmitted(false);
-        setPaymentModal({ orderId: docRef.id, method: paymentMethod, total: cartTotal });
+        setPaymentModal({ orderId: orderRef.id, method: paymentMethod, total: cartTotal });
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'orders');
@@ -627,21 +669,41 @@ export default function App() {
                     </button>
                   </div>
                 ) : (
-                  cart.map(item => (
-                    <div key={item.id} className="flex gap-4 group">
-                      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200">
+                  cart.map(item => {
+                    const liveProduct = products.find(p => p.id === item.id);
+                    const availableStock = liveProduct?.stock ?? item.stock;
+                    const isOutOfStock = availableStock <= 0;
+                    const isLowStock = availableStock > 0 && availableStock < item.qty;
+                    return (
+                    <div key={item.id} className={`flex gap-4 group rounded-xl p-2 -mx-2 transition-colors ${isOutOfStock ? 'bg-red-50' : isLowStock ? 'bg-orange-50' : ''}`}>
+                      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200 relative">
                         <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                        {isOutOfStock && (
+                          <div className="absolute inset-0 bg-red-500/70 flex items-center justify-center">
+                            <span className="text-white text-[9px] font-black uppercase tracking-widest text-center leading-tight px-1">Out of Stock</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-sm leading-tight mb-1 truncate">{item.name}</h3>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{item.category}</p>
+                        <h3 className="font-bold text-sm leading-tight mb-0.5 truncate">{item.name}</h3>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{item.category}</p>
+                        {isOutOfStock && (
+                          <p className="text-[10px] text-red-500 font-bold mb-1">❌ No longer available — please remove</p>
+                        )}
+                        {isLowStock && (
+                          <p className="text-[10px] text-orange-500 font-bold mb-1">⚠️ Only {availableStock} left — qty adjusted</p>
+                        )}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 bg-gray-100 rounded-md px-2 py-1">
+                          <div className={`flex items-center gap-3 rounded-md px-2 py-1 ${isOutOfStock ? 'bg-red-100' : 'bg-gray-100'}`}>
                             <button onClick={() => updateQty(item.id, -1)} className="text-gray-500 hover:text-black">
                               <X className="w-3 h-3" />
                             </button>
                             <span className="text-xs font-bold w-4 text-center">{item.qty}</span>
-                            <button onClick={() => updateQty(item.id, 1)} className="text-gray-500 hover:text-black">
+                            <button
+                              onClick={() => updateQty(item.id, 1)}
+                              disabled={item.qty >= availableStock}
+                              className="text-gray-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
                               <Zap className="w-3 h-3" />
                             </button>
                           </div>
@@ -657,7 +719,8 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -668,47 +731,47 @@ export default function App() {
                     <span className="text-2xl font-bold text-red-600">₱{cartTotal.toLocaleString()}</span>
                   </div>
                   <div className="mb-4">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Delivery Address</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Delivery Address <span className="text-red-400">*</span></p>
+                    </div>
 
-                    {/* Compact: detect button + address on same row */}
                     <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        placeholder="Type your delivery address..."
+                        value={deliveryAddress}
+                        onChange={e => { setDeliveryAddress(e.target.value); setLocError(''); }}
+                        className={`flex-1 bg-gray-50 border rounded-xl px-3 py-2.5 text-[11px] focus:outline-none transition-all ${deliveryAddress.trim() ? 'border-green-400 bg-green-50/30' : 'border-gray-200 focus:border-green-500'}`}
+                      />
                       <button
                         type="button"
                         onClick={detectLocation}
                         disabled={locating}
-                        className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-widest hover:bg-green-100 transition-all disabled:opacity-50"
+                        title="Use my current location"
+                        className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-[10px] font-bold hover:bg-green-100 transition-all disabled:opacity-50"
                       >
-                        {locating ? <span className="animate-spin">⏳</span> : <MapPin className="w-3 h-3" />}
-                        {locating ? 'Locating...' : deliveryCoords ? 'Re-detect' : 'Locate Me'}
+                        {locating ? <span className="animate-spin text-sm">⏳</span> : <MapPin className="w-3.5 h-3.5" />}
                       </button>
-                      <input
-                        type="text"
-                        placeholder="Or type address..."
-                        value={deliveryAddress}
-                        onChange={e => setDeliveryAddress(e.target.value)}
-                        className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 text-[11px] focus:outline-none focus:border-green-500 transition-all"
-                      />
                     </div>
 
                     {locError && <p className="text-[10px] text-red-500 mb-1">{locError}</p>}
 
-                    {/* Address text — truncated to 1 line */}
-                    {deliveryAddress && !locError && (
-                      <p className="text-[10px] text-green-600 truncate">📍 {deliveryAddress}</p>
+                    {deliveryAddress.trim() && !locError && (
+                      <p className="text-[10px] text-green-600 truncate mb-1">✅ {deliveryAddress}</p>
                     )}
 
-                    {/* Map preview — small, collapsible */}
                     {deliveryCoords && (
-                      <div className="rounded-xl overflow-hidden border border-gray-200 mt-2 h-28 w-full">
+                      <div className="rounded-xl overflow-hidden border border-gray-200 h-24 w-full mt-1">
                         <iframe
                           title="Delivery Location"
                           width="100%"
                           height="100%"
-                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${deliveryCoords.lng - 0.005},${deliveryCoords.lat - 0.005},${deliveryCoords.lng + 0.005},${deliveryCoords.lat + 0.005}&layer=mapnik&marker=${deliveryCoords.lat},${deliveryCoords.lng}`}
-                          style={{ border: 0 }}
+                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${deliveryCoords.lng - 0.003},${deliveryCoords.lat - 0.003},${deliveryCoords.lng + 0.003},${deliveryCoords.lat + 0.003}&layer=mapnik&marker=${deliveryCoords.lat},${deliveryCoords.lng}`}
+                          style={{ border: 0, pointerEvents: 'none' }}
                         />
                       </div>
                     )}
+                  </div>
                   </div>
 
                   <div className="mb-5">
@@ -779,9 +842,14 @@ export default function App() {
                   {!proofSubmitted && (
                     <button
                       onClick={async () => {
-                        // Cancel the pending order in Firestore since user is going back
+                        // Cancel order + restore stock atomically
                         try {
-                          await updateDoc(doc(db, 'orders', paymentModal.orderId), { status: 'Cancelled' });
+                          const cancelBatch = writeBatch(db);
+                          cancelBatch.update(doc(db, 'orders', paymentModal.orderId), { status: 'Cancelled' });
+                          cart.forEach(item => {
+                            cancelBatch.update(doc(db, 'products', item.id.toString()), { stock: increment(item.qty) });
+                          });
+                          await cancelBatch.commit();
                         } catch {}
                         setPaymentModal(null);
                         setIsCartOpen(true);
