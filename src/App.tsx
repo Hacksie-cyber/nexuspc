@@ -240,6 +240,10 @@ export default function App() {
   const handleCheckout = async () => {
     if (!user) { login(); return; }
     if (cart.length === 0) return;
+    if (!deliveryAddress.trim()) {
+      showToast('Please enter your delivery address.', 'error');
+      return;
+    }
 
     const orderData = {
       uid: user.uid,
@@ -741,9 +745,10 @@ export default function App() {
                   </div>
                   <button 
                     onClick={handleCheckout}
-                    className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98]"
+                    disabled={!deliveryAddress.trim()}
+                    className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Checkout Now
+                    {!deliveryAddress.trim() ? '📍 Add Delivery Address First' : 'Checkout Now'}
                   </button>
                 </div>
               )}
