@@ -127,6 +127,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
 
   // New Product Form State
@@ -1313,6 +1314,27 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                 ) : (
                   /* Customer List */
                   <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                    {/* Search Bar */}
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <div className="relative">
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search by name or email..."
+                          value={customerSearch}
+                          onChange={e => setCustomerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 transition-all"
+                        />
+                        {customerSearch && (
+                          <button
+                            onClick={() => setCustomerSearch('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse">
                         <thead>
@@ -1327,7 +1349,12 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {users.map(user => (
+                          {users
+                            .filter(u =>
+                              u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                              u.email.toLowerCase().includes(customerSearch.toLowerCase())
+                            )
+                            .map(user => (
                             <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
@@ -1356,9 +1383,28 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                               </td>
                             </tr>
                           ))}
+                          {users.filter(u =>
+                            u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                            u.email.toLowerCase().includes(customerSearch.toLowerCase())
+                          ).length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="px-6 py-16 text-center text-gray-400">
+                                <Users size={32} className="mx-auto mb-3 opacity-20" />
+                                <p className="text-sm font-medium">No customers match "{customerSearch}"</p>
+                                <button onClick={() => setCustomerSearch('')} className="mt-2 text-green-600 text-xs font-bold hover:underline">Clear search</button>
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
+                    {customerSearch && (
+                      <div className="px-6 py-3 border-t border-gray-100 bg-gray-50">
+                        <p className="text-xs text-gray-400">
+                          Showing <span className="font-bold text-gray-600">{users.filter(u => u.name.toLowerCase().includes(customerSearch.toLowerCase()) || u.email.toLowerCase().includes(customerSearch.toLowerCase())).length}</span> of <span className="font-bold text-gray-600">{users.length}</span> customers
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.div>
