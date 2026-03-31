@@ -126,6 +126,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const [catFilter, setCatFilter] = useState('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [visibleOrders, setVisibleOrders] = useState(10);
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
 
   // New Product Form State
@@ -384,7 +385,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
               icon={<ShoppingCart size={18} />} 
               label="Orders" 
               active={activeTab === 'orders'} 
-              onClick={() => setActiveTab('orders')} 
+              onClick={() => { setActiveTab('orders'); setVisibleOrders(10); }} 
               badge={stats.pending > 0 ? stats.pending : undefined}
             />
             <SidebarItem
@@ -1005,7 +1006,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(order => (
+                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, visibleOrders).map(order => (
                           <React.Fragment key={order.id}>
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
@@ -1112,6 +1113,41 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* View More / View Less footer */}
+                  {orders.length > 10 && (
+                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                      <p className="text-xs text-gray-400">
+                        Showing <span className="font-bold text-gray-700">{Math.min(visibleOrders, orders.length)}</span> of <span className="font-bold text-gray-700">{orders.length}</span> orders
+                      </p>
+                      <div className="flex gap-3">
+                        {visibleOrders < orders.length && (
+                          <button
+                            onClick={() => setVisibleOrders(prev => prev + 10)}
+                            className="text-xs font-bold uppercase tracking-widest text-green-600 hover:text-green-700 border border-green-200 bg-green-50 hover:bg-green-100 px-4 py-2 rounded-lg transition-all"
+                          >
+                            View More (+10)
+                          </button>
+                        )}
+                        {visibleOrders < orders.length && (
+                          <button
+                            onClick={() => setVisibleOrders(orders.length)}
+                            className="text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-700 border border-gray-200 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-lg transition-all"
+                          >
+                            View All
+                          </button>
+                        )}
+                        {visibleOrders > 10 && (
+                          <button
+                            onClick={() => setVisibleOrders(10)}
+                            className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 px-4 py-2 rounded-lg transition-all"
+                          >
+                            Collapse
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
