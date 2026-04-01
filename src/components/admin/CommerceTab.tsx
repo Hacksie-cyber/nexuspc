@@ -16,6 +16,8 @@ interface CommerceTabProps {
 export function CommerceTab({ activeTab, orders, bookings, users, showToast }: CommerceTabProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [bookingFilter, setBookingFilter] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
 
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
     try {
@@ -179,14 +181,137 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
             )}
 
             {activeTab === 'customers' && (
-              <motion.div 
+              <motion.div
                 key="customers"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
+                {/* Customer Transaction Modal */}
+                <AnimatePresence>
+                  {selectedCustomer && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                      onClick={() => setSelectedCustomer(null)}
+                    >
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.92, y: 24 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.92, y: 24 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {/* Modal Header */}
+                        <div className="bg-[#111827] px-8 py-6 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-green-600 flex items-center justify-center text-white text-lg font-black">
+                              {selectedCustomer.name.charAt(0)}
+                            </div>
+                            <div>
+                              <h3 className="text-white font-black text-lg tracking-tight">{selectedCustomer.name}</h3>
+                              <p className="text-white/40 text-xs">{selectedCustomer.email}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => setSelectedCustomer(null)} className="text-white/40 hover:text-white transition-colors p-1">
+                            <X size={20} />
+                          </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 p-6 space-y-6">
+                          {/* Stats */}
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { label: 'Orders', value: orders.filter(o => o.email === selectedCustomer.email).length },
+                              { label: 'Bookings', value: bookings.filter(b => b.email === selectedCustomer.email).length },
+                              { label: 'Total Spent', value: fmt(orders.filter(o => o.email === selectedCustomer.email).reduce((a, o) => a + o.total, 0)) },
+                            ].map((s, i) => (
+                              <div key={i} className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-100">
+                                <div className="text-xl font-black text-gray-900">{s.value}</div>
+                                <div className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mt-1">{s.label}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Orders */}
+                          <div>
+                            <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-3">Order History</h4>
+                            {orders.filter(o => o.email === selectedCustomer.email).length === 0 ? (
+                              <p className="text-sm text-gray-400 italic">No orders found.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {[...orders]
+                                  .filter(o => o.email === selectedCustomer.email)
+                                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                  .map(o => (
+                                  <div key={o.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    <div>
+                                      <span className="font-mono text-xs font-bold text-green-600">{o.id}</span>
+                                      <p className="text-[10px] text-gray-400 mt-0.5">{new Date(o.date).toLocaleDateString()} · {o.payment}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <StatusBadge status={o.status} />
+                                      <span className="text-sm font-black text-gray-900">{fmt(o.total)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bookings */}
+                          <div>
+                            <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-3">Booking History</h4>
+                            {bookings.filter(b => b.email === selectedCustomer.email).length === 0 ? (
+                              <p className="text-sm text-gray-400 italic">No bookings found.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {bookings
+                                  .filter(b => b.email === selectedCustomer.email)
+                                  .map(b => (
+                                  <div key={b.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    <div>
+                                      <p className="text-sm font-bold text-gray-900">{b.services}</p>
+                                      <p className="text-[10px] text-gray-400 mt-0.5">{b.date} at {b.time}</p>
+                                    </div>
+                                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
+                                      b.status === 'Pending' ? 'bg-orange-100 text-orange-600' :
+                                      b.status === 'Accepted' ? 'bg-green-100 text-green-600' :
+                                      'bg-red-100 text-red-500'
+                                    }`}>{b.status}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Search + Table */}
                 <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">Customers</h2>
+                      <p className="text-xs text-gray-400">{users.length} registered accounts</p>
+                    </div>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by name or email..."
+                        value={customerSearch}
+                        onChange={e => setCustomerSearch(e.target.value)}
+                        className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none w-64"
+                      />
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -194,31 +319,41 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                           <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Customer</th>
                           <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Email</th>
                           <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
+                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Orders</th>
                           <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Joined</th>
-                          <th className="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">UID</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {users.map(user => (
-                          <tr key={user.uid} className="hover:bg-gray-50/50 transition-colors">
+                        {users
+                          .filter(u =>
+                            !customerSearch ||
+                            u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                            u.email.toLowerCase().includes(customerSearch.toLowerCase())
+                          )
+                          .map(user => (
+                          <tr
+                            key={user.uid}
+                            className="hover:bg-green-50/50 transition-colors cursor-pointer group"
+                            onClick={() => setSelectedCustomer(user)}
+                          >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
+                                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-xs font-black text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
                                   {user.name.charAt(0)}
                                 </div>
-                                <div className="font-bold text-sm text-gray-900">{user.name}</div>
+                                <div className="font-bold text-sm text-gray-900 group-hover:text-green-700">{user.name}</div>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
                             <td className="px-6 py-4">
                               <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
                                 user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                              }`}>
-                                {user.role}
-                              </span>
+                              }`}>{user.role}</span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500 font-bold">
+                              {orders.filter(o => o.email === user.email).length}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-400">{new Date(user.joined).toLocaleDateString()}</td>
-                            <td className="px-6 py-4 font-mono text-[10px] text-gray-300">{user.uid}</td>
                           </tr>
                         ))}
                       </tbody>
