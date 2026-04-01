@@ -77,7 +77,7 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'GCash' | 'Cash on Delivery' | 'Bank Transfer'>('GCash');
-  const [paymentModal, setPaymentModal] = useState<{ orderId: string; method: string; total: number } | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{ method: string; total: number } | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
   const [proofSubmitted, setProofSubmitted] = useState(false);
@@ -273,73 +273,93 @@ export default function App() {
       return;
     }
 
-    const orderData = {
-      uid: user.uid,
-      customer: user.displayName || 'Anonymous',
-      email: user.email || '',
-      items: cart.length,
-      total: cartTotal,
-      payment: paymentMethod,
-      status: paymentMethod === 'Cash on Delivery' ? 'Processing' : 'Awaiting Payment',
-      date: new Date().toISOString(),
-      createdAt: serverTimestamp(),
-      deliveryAddress: deliveryAddress || '',
-      deliveryLat: deliveryCoords?.lat || null,
-      deliveryLng: deliveryCoords?.lng || null,
-      cartItems: cart.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        qty: item.qty
-      }))
-    };
-
-    try {
-      const batch = writeBatch(db);
-
-      // 1. Create the order document
-      const orderRef = doc(collection(db, 'orders'));
-      batch.set(orderRef, orderData);
-
-      // 2. Deduct stock for each cart item
-      cart.forEach(item => {
-        const productRef = doc(db, 'products', item.id.toString());
-        batch.update(productRef, { stock: increment(-item.qty) });
-      });
-
-      // Commit both atomically
-      await batch.commit();
-
-      setIsCartOpen(false);
-      if (paymentMethod === 'Cash on Delivery') {
+    // Cash on Delivery — create order + deduct stock immediately
+    if (paymentMethod === 'Cash on Delivery') {
+      const orderData = {
+        uid: user.uid,
+        customer: user.displayName || 'Anonymous',
+        email: user.email || '',
+        items: cart.length,
+        total: cartTotal,
+        payment: paymentMethod,
+        status: 'Processing',
+        date: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        deliveryAddress: deliveryAddress || '',
+        deliveryLat: deliveryCoords?.lat || null,
+        deliveryLng: deliveryCoords?.lng || null,
+        cartItems: cart.map(item => ({
+          id: item.id, name: item.name, price: item.price, qty: item.qty
+        }))
+      };
+      try {
+        const batch = writeBatch(db);
+        const orderRef = doc(collection(db, 'orders'));
+        batch.set(orderRef, orderData);
+        cart.forEach(item => {
+          batch.update(doc(db, 'products', item.id.toString()), { stock: increment(-item.qty) });
+        });
+        await batch.commit();
         setCart([]);
+        setIsCartOpen(false);
         showToast('Order placed! Pay when your order arrives.');
-      } else {
-        setProofFile(null);
-        setProofSubmitted(false);
-        setPaymentModal({ orderId: orderRef.id, method: paymentMethod, total: cartTotal });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, 'orders');
+        showToast('Failed to place order. Please try again.', 'error');
       }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'orders');
-      showToast('Failed to place order. Please try again.', 'error');
+      return;
     }
+
+    // GCash / Bank Transfer — just show payment modal, cart stays intact
+    // Order is only created after proof of payment is uploaded
+    setIsCartOpen(false);
+    setProofFile(null);
+    setProofSubmitted(false);
+    setPaymentModal({ method: paymentMethod, total: cartTotal });
   };
 
   const handleProofSubmit = async () => {
-    if (!proofFile || !paymentModal) return;
+    if (!proofFile || !paymentModal || !user) return;
     setProofUploading(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        await updateDoc(doc(db, 'orders', paymentModal.orderId), {
-          proofOfPayment: base64,
-          status: 'Payment Submitted',
-        });
-        setProofSubmitted(true);
-        setProofUploading(false);
-        setCart([]);
-        showToast('Payment proof submitted! We will verify shortly.');
+        try {
+          const base64 = reader.result as string;
+          // Create order + deduct stock + attach proof all in one batch
+          const batch = writeBatch(db);
+          const orderRef = doc(collection(db, 'orders'));
+          batch.set(orderRef, {
+            uid: user.uid,
+            customer: user.displayName || 'Anonymous',
+            email: user.email || '',
+            items: cart.length,
+            total: cartTotal,
+            payment: paymentModal.method,
+            status: 'Payment Submitted',
+            date: new Date().toISOString(),
+            createdAt: serverTimestamp(),
+            deliveryAddress: deliveryAddress || '',
+            deliveryLat: deliveryCoords?.lat || null,
+            deliveryLng: deliveryCoords?.lng || null,
+            cartItems: cart.map(item => ({
+              id: item.id, name: item.name, price: item.price, qty: item.qty
+            })),
+            proofOfPayment: base64,
+          });
+          cart.forEach(item => {
+            batch.update(doc(db, 'products', item.id.toString()), { stock: increment(-item.qty) });
+          });
+          await batch.commit();
+          setCart([]);
+          setProofSubmitted(true);
+          setProofUploading(false);
+          showToast('Payment proof submitted! We will verify shortly.');
+        } catch (err) {
+          setProofUploading(false);
+          handleFirestoreError(err, OperationType.CREATE, 'orders');
+          showToast('Failed to submit order. Please try again.', 'error');
+        }
       };
       reader.readAsDataURL(proofFile);
     } catch (err) {
@@ -839,16 +859,8 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   {!proofSubmitted && (
                     <button
-                      onClick={async () => {
-                        // Cancel order + restore stock atomically
-                        try {
-                          const cancelBatch = writeBatch(db);
-                          cancelBatch.update(doc(db, 'orders', paymentModal.orderId), { status: 'Cancelled' });
-                          cart.forEach(item => {
-                            cancelBatch.update(doc(db, 'products', item.id.toString()), { stock: increment(item.qty) });
-                          });
-                          await cancelBatch.commit();
-                        } catch {}
+                      onClick={() => {
+                        // No order was created yet — just close modal and reopen cart
                         setPaymentModal(null);
                         setIsCartOpen(true);
                       }}
@@ -893,7 +905,7 @@ export default function App() {
                     <div className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-100">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Amount to Pay</p>
                       <p className="text-3xl font-black text-red-600">₱{paymentModal.total.toLocaleString()}</p>
-                      <p className="text-[10px] text-gray-400 mt-1 font-mono">Order #{paymentModal.orderId.slice(-8).toUpperCase()}</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Complete payment then upload your screenshot below</p>
                     </div>
 
                     {/* GCash Details */}
@@ -920,7 +932,7 @@ export default function App() {
                           <p className="text-sm font-bold text-blue-600">NEXUS PC Store</p>
                           <div className="mt-4 pt-4 border-t border-blue-100">
                             <p className="text-[10px] text-blue-400 font-medium">Use your Order ID as reference:</p>
-                            <p className="text-sm font-black text-blue-700 font-mono mt-1">#{paymentModal.orderId.slice(-8).toUpperCase()}</p>
+                            <p className="text-sm font-black text-blue-700 font-mono mt-1">Your name or phone number</p>
                           </div>
                         </div>
                         <p className="text-xs text-gray-400 text-center">Send the exact amount then upload your GCash screenshot below.</p>
@@ -938,7 +950,7 @@ export default function App() {
                               { label: 'Bank', value: 'BDO Unibank' },
                               { label: 'Account Name', value: 'NEXUS PC Store' },
                               { label: 'Account Number', value: '1234 5678 9012' },
-                              { label: 'Reference', value: `#${paymentModal.orderId.slice(-8).toUpperCase()}` },
+                              { label: 'Reference', value: 'Your name or phone number' },
                             ].map((row, i) => (
                               <div key={i} className="flex justify-between items-center py-2 border-b border-green-100 last:border-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{row.label}</span>
