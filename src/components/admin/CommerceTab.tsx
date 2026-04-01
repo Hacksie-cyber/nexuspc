@@ -258,9 +258,9 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                       {['All', 'Pending', 'Accepted', 'Declined'].map(f => (
                         <button
                           key={f}
-                          onClick={() => setSearchQuery(f === 'All' ? '' : f)}
+                          onClick={() => setBookingFilter(f === 'All' ? '' : f)}
                           className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
-                            (f === 'All' && searchQuery === '') || searchQuery === f
+                            (f === 'All' && bookingFilter === '') || bookingFilter === f
                               ? 'bg-green-600 text-white'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}
@@ -279,7 +279,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {bookings
-                        .filter(b => !searchQuery || b.status === searchQuery)
+                        .filter(b => !bookingFilter || b.status === bookingFilter)
                         .map(b => (
                           <div key={b.id} className="p-6 flex flex-col md:flex-row md:items-center gap-4 hover:bg-gray-50 transition-colors">
                             {/* Service icon */}
