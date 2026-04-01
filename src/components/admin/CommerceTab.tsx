@@ -148,6 +148,54 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                                             <div className="text-sm font-bold text-gray-900">{new Date(order.date).toLocaleString()}</div>
                                           </div>
                                         </div>
+
+                                        {/* Proof of Payment */}
+                                        {(order.payment === 'GCash' || order.payment === 'Bank Transfer') && (
+                                          <div>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                                              Proof of Payment
+                                            </h4>
+                                            {(order as any).proofOfPayment ? (
+                                              <div className="space-y-2">
+                                                <div className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                                                  <img
+                                                    src={(order as any).proofOfPayment}
+                                                    alt="Proof of Payment"
+                                                    className="w-full max-h-64 object-contain"
+                                                  />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                  <p className="text-[10px] text-green-600 font-bold">✅ Proof submitted</p>
+                                                  <a
+                                                    href={(order as any).proofOfPayment}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-[10px] font-bold text-blue-500 hover:underline uppercase tracking-widest"
+                                                  >
+                                                    Open Full Image ↗
+                                                  </a>
+                                                </div>
+                                                {order.status === 'Payment Submitted' && (
+                                                  <button
+                                                    onClick={() => handleUpdateOrderStatus(order.id, 'Processing')}
+                                                    className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-green-600/20"
+                                                  >
+                                                    ✓ Verify Payment &amp; Move to Processing
+                                                  </button>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-100 rounded-xl">
+                                                <span className="text-yellow-500 text-sm">⏳</span>
+                                                <p className="text-[11px] text-yellow-700 font-medium">
+                                                  {order.status === 'Awaiting Payment'
+                                                    ? 'Customer has not uploaded proof yet.'
+                                                    : 'No proof of payment on file.'}
+                                                </p>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                         {(order as any).deliveryAddress && (
                                           <div>
                                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Delivery Address</h4>
