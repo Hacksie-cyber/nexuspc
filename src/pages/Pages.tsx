@@ -871,10 +871,13 @@ function ContactPage() {
   );
 }
 
-function ProfilePage({ user, orders, navigate, logout }: { user: User | null, orders: any[], navigate: (p: string) => void, logout: () => void }) {
+function ProfilePage({ user, orders, navigate, logout, onRename }: { user: User | null, orders: any[], navigate: (p: string) => void, logout: () => void, onRename: (newName: string) => Promise<void> }) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' } | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   if (!user) {
     return (
@@ -1034,7 +1037,54 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
 
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold tracking-tighter">{user.displayName || 'NEXUS User'}</h1>
+              {editingName ? (
+                <div className="flex items-center gap-2 mb-1">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        setSavingName(true);
+                        onRename(nameInput).finally(() => { setSavingName(false); setEditingName(false); });
+                      }
+                      if (e.key === 'Escape') setEditingName(false);
+                    }}
+                    className="text-2xl font-bold tracking-tighter border-b-2 border-green-500 outline-none bg-transparent flex-1 min-w-0"
+                    placeholder="Enter your name"
+                  />
+                  <button
+                    disabled={savingName || !nameInput.trim()}
+                    onClick={() => {
+                      setSavingName(true);
+                      onRename(nameInput).finally(() => { setSavingName(false); setEditingName(false); });
+                    }}
+                    className="text-xs font-bold text-white bg-green-600 px-3 py-1.5 rounded-lg hover:bg-green-700 transition-all shrink-0 disabled:opacity-50"
+                  >
+                    {savingName ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setEditingName(false)}
+                    className="text-xs font-bold text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 shrink-0"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group mb-1">
+                  <h1 className="text-3xl font-bold tracking-tighter">{user.displayName || 'NEXUS User'}</h1>
+                  <button
+                    onClick={() => { setNameInput(user.displayName || ''); setEditingName(true); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-green-600 p-1 rounded-lg hover:bg-green-50"
+                    title="Edit name"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
               <p className="text-gray-500">{user.email}</p>
             </div>
 
