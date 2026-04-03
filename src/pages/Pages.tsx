@@ -202,8 +202,52 @@ function ShopPage({
 }) {
   return (
     <div className="max-w-7xl mx-auto px-4 pt-12">
+      <div className="flex flex-col lg:flex-row gap-12">
+        {/* Sidebar Filters */}
+        <aside className="w-full lg:w-64 shrink-0 space-y-10">
+          <div>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-6">Categories</h3>
+            <div className="space-y-2">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-between ${
+                    selectedCategory === cat.id ? 'bg-green-600 text-white shadow-lg shadow-green-600/20' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="text-lg opacity-80">{cat.icon}</span>
+                    {cat.label}
+                  </span>
+                  {selectedCategory === cat.id && <ChevronRight className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-6">Price Range</h3>
+            <div className="px-2">
+              <div className="flex justify-between text-xs font-bold text-green-600 mb-4">
+                <span>₱0</span>
+                <span>₱{priceRange.toLocaleString()}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="150000" 
+                step="1000"
+                value={priceRange}
+                onChange={(e) => setPriceRange(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
+              />
+            </div>
+          </div>
+        </aside>
+
         {/* Product Grid */}
-        <div>
+        <div className="flex-1">
           <div className="flex justify-between items-center mb-10">
             <h2 className="text-3xl font-bold tracking-tighter">
               {selectedCategory === 'all' ? 'All Products' : CATEGORIES.find(c => c.id === selectedCategory)?.label}
@@ -225,6 +269,7 @@ function ShopPage({
             </div>
           )}
         </div>
+      </div>
     </div>
   );
 }
@@ -829,7 +874,7 @@ function ContactPage() {
 function ProfilePage({ user, orders, navigate, logout }: { user: User | null, orders: any[], navigate: (p: string) => void, logout: () => void }) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' | 'received' } | null>(null);
 
   if (!user) {
     return (
@@ -844,7 +889,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
 
   const handleOrderAction = async (orderId: string, type: 'cancel' | 'refund' | 'reject') => {
     setActionLoading(orderId + type);
-    const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected' };
+    const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected', received: 'Delivered' };
     try {
       await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type] });
     } catch (err) {
@@ -901,6 +946,12 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
         return (
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setConfirmAction({ orderId: order.id, type: 'received' })}
+              className="text-[10px] font-bold uppercase tracking-widest text-green-600 border border-green-300 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-all"
+            >
+              ✅ Order Received
+            </button>
+            <button
               onClick={() => setConfirmAction({ orderId: order.id, type: 'refund' })}
               className="text-[10px] font-bold uppercase tracking-widest text-orange-500 border border-orange-200 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-all"
             >
@@ -939,18 +990,23 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8"
               onClick={e => e.stopPropagation()}
             >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 ${confirmAction.type === 'cancel' ? 'bg-red-100' : confirmAction.type === 'refund' ? 'bg-orange-100' : 'bg-gray-100'}`}>
-                <X className={`w-7 h-7 ${confirmAction.type === 'cancel' ? 'text-red-500' : confirmAction.type === 'refund' ? 'text-orange-500' : 'text-gray-500'}`} />
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 ${confirmAction.type === 'cancel' ? 'bg-red-100' : confirmAction.type === 'refund' ? 'bg-orange-100' : confirmAction.type === 'received' ? 'bg-green-100' : 'bg-gray-100'}`}>
+                {confirmAction.type === 'received'
+                  ? <span className="text-3xl">📦</span>
+                  : <X className={`w-7 h-7 ${confirmAction.type === 'cancel' ? 'text-red-500' : confirmAction.type === 'refund' ? 'text-orange-500' : 'text-gray-500'}`} />
+                }
               </div>
               <h3 className="text-lg font-black text-center tracking-tight mb-2">
                 {confirmAction.type === 'cancel' && 'Cancel this order?'}
                 {confirmAction.type === 'refund' && 'Request a refund?'}
                 {confirmAction.type === 'reject' && 'Reject delivery?'}
+                {confirmAction.type === 'received' && 'Confirm order received?'}
               </h3>
               <p className="text-sm text-gray-400 text-center mb-7 leading-relaxed">
                 {confirmAction.type === 'cancel' && 'This will cancel your order. This action cannot be undone.'}
                 {confirmAction.type === 'refund' && "A refund request will be sent to our team for review. We'll get back to you within 1–3 business days."}
                 {confirmAction.type === 'reject' && "You're refusing delivery of this shipment. Our team will process your return and contact you shortly."}
+                {confirmAction.type === 'received' && 'Please confirm that you have received your order in good condition. This will mark your order as Delivered.'}
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setConfirmAction(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">
@@ -959,7 +1015,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                 <button
                   disabled={!!actionLoading}
                   onClick={() => handleOrderAction(confirmAction.orderId, confirmAction.type)}
-                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 ${confirmAction.type === 'cancel' ? 'bg-red-500 hover:bg-red-600' : confirmAction.type === 'refund' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-gray-700 hover:bg-gray-800'}`}
+                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 ${confirmAction.type === 'cancel' ? 'bg-red-500 hover:bg-red-600' : confirmAction.type === 'refund' ? 'bg-orange-500 hover:bg-orange-600' : confirmAction.type === 'received' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700 hover:bg-gray-800'}`}
                 >
                   {actionLoading ? 'Processing...' : 'Confirm'}
                 </button>
@@ -1082,7 +1138,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                             )}
                             {order.status === 'Shipped' && (
                               <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-600 leading-relaxed">
-                                <strong>Your order is on the way.</strong> You may request a refund or reject the delivery if needed.
+                                <strong>Your order is on the way.</strong> Once you receive it, click <strong>Order Received</strong> to confirm delivery. You may also request a refund or reject the delivery if needed.
                               </div>
                             )}
                             {order.status === 'Delivered' && (
