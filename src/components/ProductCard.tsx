@@ -15,7 +15,7 @@ function ProductCard({ product, addToCart, onView }: { product: Product, addToCa
         <img 
           src={product.img} 
           alt={product.name} 
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-700"
           referrerPolicy="no-referrer"
         />
         {product.oldPrice && (
