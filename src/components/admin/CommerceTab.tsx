@@ -90,7 +90,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                                     onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
                                     className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-green-500"
                                   >
-                                    {['Processing', 'Awaiting Payment', 'Payment Submitted', 'Shipped', 'Delivered', 'Cancelled', 'Refund Requested', 'Return & Rejected'].map(s => (
+                                    {['Processing', 'Awaiting Payment', 'Payment Submitted', 'Shipped', 'Delivered', 'Completed', 'Cancelled', 'Refund Requested', 'Return & Rejected'].map(s => (
                                       <option key={s} value={s}>{s}</option>
                                     ))}
                                   </select>
