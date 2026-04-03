@@ -844,7 +844,7 @@ function ContactPage() {
 function ProfilePage({ user, orders, navigate, logout }: { user: User | null, orders: any[], navigate: (p: string) => void, logout: () => void }) {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ orderId: string; type: 'cancel' | 'refund' | 'reject' | 'received' } | null>(null);
 
   if (!user) {
     return (
@@ -857,9 +857,9 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
 
   const fmt = (n: number) => '₱' + n.toLocaleString();
 
-  const handleOrderAction = async (orderId: string, type: 'cancel' | 'refund' | 'reject') => {
+  const handleOrderAction = async (orderId: string, type: 'cancel' | 'refund' | 'reject' | 'received') => {
     setActionLoading(orderId + type);
-    const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected' };
+    const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected', received: 'Completed' };
     try {
       await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type] });
     } catch (err) {
@@ -874,6 +874,7 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
     'Awaiting Payment': 'bg-purple-100 text-purple-600',
     'Payment Submitted': 'bg-indigo-100 text-indigo-600',
     Delivered: 'bg-green-100 text-green-600',
+    Completed: 'bg-emerald-100 text-emerald-700',
     Shipped: 'bg-blue-100 text-blue-600',
     Cancelled: 'bg-red-100 text-red-600',
     Processing: 'bg-orange-100 text-orange-600',
@@ -929,6 +930,15 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
             </button>
           </div>
         );
+      case 'Delivered':
+        return (
+          <button
+            onClick={() => setConfirmAction({ orderId: order.id, type: 'received' })}
+            className="text-[10px] font-bold uppercase tracking-widest text-green-600 border border-green-300 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+          >
+            ✅ Order Received
+          </button>
+        );
       case 'Refund Requested':
         return <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700 bg-yellow-50 border border-yellow-200 px-3 py-1.5 rounded-lg">Awaiting Refund Review</span>;
       case 'Return & Rejected':
@@ -954,18 +964,27 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8"
               onClick={e => e.stopPropagation()}
             >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 ${confirmAction.type === 'cancel' ? 'bg-red-100' : confirmAction.type === 'refund' ? 'bg-orange-100' : 'bg-gray-100'}`}>
-                <X className={`w-7 h-7 ${confirmAction.type === 'cancel' ? 'text-red-500' : confirmAction.type === 'refund' ? 'text-orange-500' : 'text-gray-500'}`} />
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5 ${
+                confirmAction.type === 'cancel' ? 'bg-red-100' :
+                confirmAction.type === 'refund' ? 'bg-orange-100' :
+                confirmAction.type === 'received' ? 'bg-green-100' : 'bg-gray-100'
+              }`}>
+                {confirmAction.type === 'received'
+                  ? <CheckCircle2 className="w-7 h-7 text-green-600" />
+                  : <X className={`w-7 h-7 ${confirmAction.type === 'cancel' ? 'text-red-500' : confirmAction.type === 'refund' ? 'text-orange-500' : 'text-gray-500'}`} />
+                }
               </div>
               <h3 className="text-lg font-black text-center tracking-tight mb-2">
                 {confirmAction.type === 'cancel' && 'Cancel this order?'}
                 {confirmAction.type === 'refund' && 'Request a refund?'}
                 {confirmAction.type === 'reject' && 'Reject delivery?'}
+                {confirmAction.type === 'received' && 'Confirm order received?'}
               </h3>
               <p className="text-sm text-gray-400 text-center mb-7 leading-relaxed">
                 {confirmAction.type === 'cancel' && 'This will cancel your order. This action cannot be undone.'}
                 {confirmAction.type === 'refund' && "A refund request will be sent to our team for review. We'll get back to you within 1–3 business days."}
                 {confirmAction.type === 'reject' && "You're refusing delivery of this shipment. Our team will process your return and contact you shortly."}
+                {confirmAction.type === 'received' && "Confirming that you've received your order in good condition. Thank you for shopping with NEXUS PC!"}
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setConfirmAction(null)} className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">
@@ -974,7 +993,12 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                 <button
                   disabled={!!actionLoading}
                   onClick={() => handleOrderAction(confirmAction.orderId, confirmAction.type)}
-                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 ${confirmAction.type === 'cancel' ? 'bg-red-500 hover:bg-red-600' : confirmAction.type === 'refund' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-gray-700 hover:bg-gray-800'}`}
+                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 ${
+                    confirmAction.type === 'cancel' ? 'bg-red-500 hover:bg-red-600' :
+                    confirmAction.type === 'refund' ? 'bg-orange-500 hover:bg-orange-600' :
+                    confirmAction.type === 'received' ? 'bg-green-600 hover:bg-green-700' :
+                    'bg-gray-700 hover:bg-gray-800'
+                  }`}
                 >
                   {actionLoading ? 'Processing...' : 'Confirm'}
                 </button>
@@ -1102,7 +1126,12 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                             )}
                             {order.status === 'Delivered' && (
                               <div className="mt-4 p-3 bg-green-50 border border-green-100 rounded-xl text-xs text-green-600 leading-relaxed">
-                                <strong>Order delivered.</strong> Thank you for shopping with NEXUS PC!
+                                <strong>Order delivered.</strong> Please click "Order Received" above to confirm you received it in good condition.
+                              </div>
+                            )}
+                            {order.status === 'Completed' && (
+                              <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 leading-relaxed">
+                                <strong>✅ Order completed.</strong> Thank you for shopping with NEXUS PC!
                               </div>
                             )}
                             {order.status === 'Refund Requested' && (
