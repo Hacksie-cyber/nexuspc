@@ -105,7 +105,7 @@ function ProductModal({ product, onClose, addToCart }: { product: Product, onClo
             <img
               src={product.img}
               alt={product.name}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain p-4"
               referrerPolicy="no-referrer"
             />
             {discount && (
