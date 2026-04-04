@@ -164,6 +164,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                 <OverviewTab
                   activeTab={activeTab as 'dashboard' | 'analytics'}
                   stats={stats} orders={orders} products={products}
+                  users={users} setActiveTab={setActiveTab}
                   statPeriod={statPeriod} setStatPeriod={setStatPeriod}
                 />
               </motion.div>
