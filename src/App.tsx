@@ -165,6 +165,12 @@ export default function App() {
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
   const cartTotal = cart.reduce((acc: number, item) => acc + (item.price * item.qty), 0);
 
+  const FREE_SHIPPING_THRESHOLD = 5000;
+  const SHIPPING_FEE = 150;
+  const qualifiesForFreeShipping = cartTotal >= FREE_SHIPPING_THRESHOLD;
+  const shippingFee = qualifiesForFreeShipping ? 0 : SHIPPING_FEE;
+  const orderTotal = cartTotal + shippingFee;
+
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const q = searchQuery.toLowerCase();
@@ -278,7 +284,9 @@ export default function App() {
       customer: user.displayName || 'Anonymous',
       email: user.email || '',
       items: cart.length,
-      total: cartTotal,
+      subtotal: cartTotal,
+      shippingFee: shippingFee,
+      total: orderTotal,
       payment: paymentMethod,
       status: paymentMethod === 'Cash on Delivery' ? 'Processing' : 'Awaiting Payment',
       date: new Date().toISOString(),
@@ -317,7 +325,7 @@ export default function App() {
       } else {
         setProofFile(null);
         setProofSubmitted(false);
-        setPaymentModal({ orderId: orderRef.id, method: paymentMethod, total: cartTotal });
+        setPaymentModal({ orderId: orderRef.id, method: paymentMethod, total: orderTotal });
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'orders');
@@ -737,9 +745,34 @@ export default function App() {
 
               {cart.length > 0 && (
                 <div className="p-6 border-t bg-gray-50">
-                  <div className="flex justify-between items-center mb-6">
-                    <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
-                    <span className="text-2xl font-bold text-red-600">₱{cartTotal.toLocaleString()}</span>
+                  {/* Order Summary Breakdown */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
+                      <span className="text-base font-bold text-gray-800">₱{cartTotal.toLocaleString()}</span>
+                    </div>
+
+                    {qualifiesForFreeShipping ? (
+                      <div className="flex justify-between items-center">
+                        <span className="text-green-600 font-bold text-xs uppercase tracking-widest">🎉 Shipping Discount</span>
+                        <span className="text-green-600 font-bold text-sm">-₱{SHIPPING_FEE.toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Shipping Fee</span>
+                          <p className="text-[10px] text-orange-500 font-medium mt-0.5">
+                            Add ₱{(FREE_SHIPPING_THRESHOLD - cartTotal).toLocaleString()} more for free shipping
+                          </p>
+                        </div>
+                        <span className="text-base font-bold text-gray-800">₱{SHIPPING_FEE.toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+                      <span className="text-gray-700 font-bold text-xs uppercase tracking-widest">Total</span>
+                      <span className="text-2xl font-bold text-red-600">₱{orderTotal.toLocaleString()}</span>
+                    </div>
                   </div>
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
