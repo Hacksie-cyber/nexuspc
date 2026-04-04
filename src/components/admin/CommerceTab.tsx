@@ -18,6 +18,9 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
   const [bookingFilter, setBookingFilter] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [ordersVisible, setOrdersVisible] = useState(10);
+  const [bookingsVisible, setBookingsVisible] = useState(10);
+  const [customersVisible, setCustomersVisible] = useState(10);
 
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
     try {
@@ -69,7 +72,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(order => (
+                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, ordersVisible).map(order => (
                           <React.Fragment key={order.id}>
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
@@ -224,6 +227,25 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                       </tbody>
                     </table>
                   </div>
+                  {orders.length > ordersVisible && (
+                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
+                      <span className="text-xs text-gray-400">Showing {ordersVisible} of {orders.length} orders</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setOrdersVisible(v => v + 10)}
+                          className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-gray-200 rounded-lg hover:border-green-500 hover:text-green-600 transition-all"
+                        >
+                          Load 10 more
+                        </button>
+                        <button
+                          onClick={() => setOrdersVisible(orders.length)}
+                          className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
+                        >
+                          View all
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -378,6 +400,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                             u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
                             u.email.toLowerCase().includes(customerSearch.toLowerCase())
                           )
+                          .slice(0, customersVisible)
                           .map(user => (
                           <tr
                             key={user.uid}
@@ -407,6 +430,32 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                       </tbody>
                     </table>
                   </div>
+                  {(() => {
+                    const filtered = users.filter(u =>
+                      !customerSearch ||
+                      u.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                      u.email.toLowerCase().includes(customerSearch.toLowerCase())
+                    );
+                    return filtered.length > customersVisible ? (
+                      <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
+                        <span className="text-xs text-gray-400">Showing {customersVisible} of {filtered.length} customers</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setCustomersVisible(v => v + 10)}
+                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-gray-200 rounded-lg hover:border-green-500 hover:text-green-600 transition-all"
+                          >
+                            Load 10 more
+                          </button>
+                          <button
+                            onClick={() => setCustomersVisible(filtered.length)}
+                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
+                          >
+                            View all
+                          </button>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               </motion.div>
             )}
@@ -463,6 +512,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                     <div className="divide-y divide-gray-100">
                       {bookings
                         .filter(b => !bookingFilter || b.status === bookingFilter)
+                        .slice(0, bookingsVisible)
                         .map(b => (
                           <div key={b.id} className="p-6 flex flex-col md:flex-row md:items-center gap-4 hover:bg-gray-50 transition-colors">
                             {/* Service icon */}
@@ -529,6 +579,28 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                           </div>
                         ))}
                     </div>
+                    {(() => {
+                      const filtered = bookings.filter(b => !bookingFilter || b.status === bookingFilter);
+                      return filtered.length > bookingsVisible ? (
+                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
+                          <span className="text-xs text-gray-400">Showing {bookingsVisible} of {filtered.length} bookings</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setBookingsVisible(v => v + 10)}
+                              className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-gray-200 rounded-lg hover:border-green-500 hover:text-green-600 transition-all"
+                            >
+                              Load 10 more
+                            </button>
+                            <button
+                              onClick={() => setBookingsVisible(filtered.length)}
+                              className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
+                            >
+                              View all
+                            </button>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
                   )}
                 </div>
               </motion.div>
