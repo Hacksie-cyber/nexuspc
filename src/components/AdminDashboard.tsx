@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, TrendingUp, Package, PackagePlus, ShoppingCart,
@@ -47,11 +47,11 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
     return () => { pUnsub(); oUnsub(); uUnsub(); bUnsub(); };
   }, []);
 
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
-  };
+  }, []);
 
   // ── Stats ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -69,8 +69,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
     const catData = CATEGORIES.filter(c => c.id !== 'all').map(cat => ({
       name: cat.label, value: products.filter(p => p.category === cat.id).length
     }));
-    const avgOrderValue = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
-    return { revenue: totalRevenue, orders: orders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, avgOrderValue, chartData, catData };
+    return { revenue: totalRevenue, orders: orders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, chartData, catData };
   }, [products, orders, users]);
 
   // ── Tab group helper ─────────────────────────────────────────────
@@ -164,9 +163,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
                 <OverviewTab
                   activeTab={activeTab as 'dashboard' | 'analytics'}
                   stats={stats} orders={orders} products={products}
-                  users={users}
                   statPeriod={statPeriod} setStatPeriod={setStatPeriod}
-                  setActiveTab={setActiveTab}
                 />
               </motion.div>
             )}
