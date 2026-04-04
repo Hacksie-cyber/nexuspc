@@ -613,6 +613,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                       <p className="font-medium">No bookings yet.</p>
                     </div>
                   ) : (
+                    <>
                     <div className="divide-y divide-gray-100">
                       {bookings
                         .filter(b => !bookingFilter || b.status === bookingFilter)
@@ -710,6 +711,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                         </div>
                       ) : null;
                     })()}
+                    </>
                   )}
                 </div>
               </motion.div>
