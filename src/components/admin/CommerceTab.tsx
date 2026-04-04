@@ -15,7 +15,13 @@ interface CommerceTabProps {
 
 export function CommerceTab({ activeTab, orders, bookings, users, showToast }: CommerceTabProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatus, setOrderStatus] = useState('');
+  const [orderPayment, setOrderPayment] = useState('');
+  const [orderDateFrom, setOrderDateFrom] = useState('');
+  const [orderDateTo, setOrderDateTo] = useState('');
   const [bookingFilter, setBookingFilter] = useState('');
+  const [bookingSort, setBookingSort] = useState<'newest' | 'oldest'>('newest');
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [ordersVisible, setOrdersVisible] = useState(10);
@@ -57,6 +63,84 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                   </div>
                 </div>
 
+                {/* Filter Bar */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+                  {/* Search */}
+                  <div className="relative flex-1 min-w-[180px]">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by name or order ID..."
+                      value={orderSearch}
+                      onChange={e => { setOrderSearch(e.target.value); setOrdersVisible(10); }}
+                      className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none"
+                    />
+                  </div>
+                  {/* Status */}
+                  <select
+                    value={orderStatus}
+                    onChange={e => { setOrderStatus(e.target.value); setOrdersVisible(10); }}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none"
+                  >
+                    <option value="">All Statuses</option>
+                    {['Processing','Awaiting Payment','Payment Submitted','Shipped','Delivered','Completed','Cancelled','Refund Requested','Return & Rejected'].map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  {/* Payment */}
+                  <select
+                    value={orderPayment}
+                    onChange={e => { setOrderPayment(e.target.value); setOrdersVisible(10); }}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none"
+                  >
+                    <option value="">All Payments</option>
+                    {['GCash','PayPal','Bank Transfer','Cash on Delivery'].map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                  {/* Date range */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={orderDateFrom}
+                      onChange={e => { setOrderDateFrom(e.target.value); setOrdersVisible(10); }}
+                      className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none"
+                    />
+                    <span className="text-xs text-gray-400">to</span>
+                    <input
+                      type="date"
+                      value={orderDateTo}
+                      onChange={e => { setOrderDateTo(e.target.value); setOrdersVisible(10); }}
+                      className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-green-500 outline-none"
+                    />
+                  </div>
+                  {/* Clear */}
+                  {(orderSearch || orderStatus || orderPayment || orderDateFrom || orderDateTo) && (
+                    <button
+                      onClick={() => { setOrderSearch(''); setOrderStatus(''); setOrderPayment(''); setOrderDateFrom(''); setOrderDateTo(''); setOrdersVisible(10); }}
+                      className="px-3 py-2 text-xs font-bold uppercase tracking-widest text-red-500 hover:bg-red-50 rounded-lg border border-red-200 transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Table */}
+                {(() => {
+                  const filtered = [...orders]
+                    .filter(o => {
+                      const q = orderSearch.toLowerCase();
+                      const matchSearch = !q || o.customer.toLowerCase().includes(q) || o.id.toLowerCase().includes(q);
+                      const matchStatus = !orderStatus || o.status === orderStatus;
+                      const matchPayment = !orderPayment || o.payment === orderPayment;
+                      const d = new Date(o.date);
+                      const matchFrom = !orderDateFrom || d >= new Date(orderDateFrom);
+                      const matchTo = !orderDateTo || d <= new Date(orderDateTo);
+                      return matchSearch && matchStatus && matchPayment && matchFrom && matchTo;
+                    })
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                  const visible = filtered.slice(0, ordersVisible);
+                  return (
                 <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -72,8 +156,9 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, ordersVisible).map(order => (
-                          <React.Fragment key={order.id}>
+                        {visible.length === 0 ? (
+                          <tr><td colSpan={7} className="px-6 py-16 text-center text-sm text-gray-400">No orders match your filters.</td></tr>
+                        ) : visible.map(order => (
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
                               <td className="px-6 py-4">
@@ -227,9 +312,9 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                       </tbody>
                     </table>
                   </div>
-                  {orders.length > ordersVisible && (
+                  {filtered.length > ordersVisible && (
                     <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-                      <span className="text-xs text-gray-400">Showing {ordersVisible} of {orders.length} orders</span>
+                      <span className="text-xs text-gray-400">Showing {Math.min(ordersVisible, filtered.length)} of {filtered.length} orders</span>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setOrdersVisible(v => v + 10)}
@@ -238,7 +323,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                           Load 10 more
                         </button>
                         <button
-                          onClick={() => setOrdersVisible(orders.length)}
+                          onClick={() => setOrdersVisible(filtered.length)}
                           className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
                         >
                           View all
@@ -247,6 +332,8 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                     </div>
                   )}
                 </div>
+                  );
+                })()}
               </motion.div>
             )}
 
@@ -484,13 +571,29 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
 
                 {/* Bookings list */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
                     <h3 className="font-bold text-gray-900">All Bookings</h3>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Sort */}
+                      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                        <button
+                          onClick={() => setBookingSort('newest')}
+                          className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-md transition-all ${bookingSort === 'newest' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          Newest
+                        </button>
+                        <button
+                          onClick={() => setBookingSort('oldest')}
+                          className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-md transition-all ${bookingSort === 'oldest' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          Oldest
+                        </button>
+                      </div>
+                      {/* Status filter */}
                       {['All', 'Pending', 'Accepted', 'Declined'].map(f => (
                         <button
                           key={f}
-                          onClick={() => setBookingFilter(f === 'All' ? '' : f)}
+                          onClick={() => { setBookingFilter(f === 'All' ? '' : f); setBookingsVisible(10); }}
                           className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${
                             (f === 'All' && bookingFilter === '') || bookingFilter === f
                               ? 'bg-green-600 text-white'
@@ -512,6 +615,11 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                     <div className="divide-y divide-gray-100">
                       {bookings
                         .filter(b => !bookingFilter || b.status === bookingFilter)
+                        .sort((a, b) => {
+                          const aTime = a.createdAt?.seconds ?? new Date(a.date).getTime() / 1000;
+                          const bTime = b.createdAt?.seconds ?? new Date(b.date).getTime() / 1000;
+                          return bookingSort === 'newest' ? bTime - aTime : aTime - bTime;
+                        })
                         .slice(0, bookingsVisible)
                         .map(b => (
                           <div key={b.id} className="p-6 flex flex-col md:flex-row md:items-center gap-4 hover:bg-gray-50 transition-colors">
