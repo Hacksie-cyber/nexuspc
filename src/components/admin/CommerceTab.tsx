@@ -159,6 +159,7 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                         {visible.length === 0 ? (
                           <tr><td colSpan={7} className="px-6 py-16 text-center text-sm text-gray-400">No orders match your filters.</td></tr>
                         ) : visible.map(order => (
+                            <React.Fragment key={order.id}>
                             <tr className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4 font-mono text-sm font-bold text-green-600">{order.id}</td>
                               <td className="px-6 py-4">
