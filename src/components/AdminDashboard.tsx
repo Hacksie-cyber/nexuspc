@@ -55,23 +55,66 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
 
   // ── Stats ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((acc, o) => acc + o.total, 0);
-    const lowStockCount = products.filter(p => p.stock <= 5).length;
-    const pendingOrders = orders.filter(o => o.status === 'Processing').length;
-    const revenueByDay: { [key: string]: number } = {};
-    orders.forEach(o => {
-      const date = new Date(o.date).toLocaleDateString('en-US', { weekday: 'short' });
-      revenueByDay[date] = (revenueByDay[date] || 0) + o.total;
+    const now = new Date();
+
+    // Filter orders by selected period
+    const periodOrders = orders.filter(o => {
+      const d = new Date(o.date);
+      if (statPeriod === 'week') {
+        const start = new Date(now);
+        start.setDate(now.getDate() - now.getDay());
+        start.setHours(0, 0, 0, 0);
+        return d >= start;
+      }
+      if (statPeriod === 'month') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }
+      return d.getFullYear() === now.getFullYear();
     });
-    const chartData = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => ({
-      name: day, revenue: revenueByDay[day] || 0
-    }));
+
+    const totalRevenue = periodOrders.reduce((acc, o) => acc + (o.total ?? 0), 0);
+    const lowStockCount = products.filter(p => p.stock <= 5).length;
+    const pendingOrders = periodOrders.filter(o => o.status === 'Processing').length;
+    const avgOrderValue = periodOrders.length > 0 ? totalRevenue / periodOrders.length : 0;
+
+    // Build chartData based on period
+    let chartData: { name: string; revenue: number }[] = [];
+
+    if (statPeriod === 'week') {
+      const revenueByDay: { [key: string]: number } = {};
+      periodOrders.forEach(o => {
+        const day = new Date(o.date).toLocaleDateString('en-US', { weekday: 'short' });
+        revenueByDay[day] = (revenueByDay[day] || 0) + (o.total ?? 0);
+      });
+      chartData = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => ({
+        name: day, revenue: revenueByDay[day] || 0
+      }));
+    } else if (statPeriod === 'month') {
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const revenueByDate: { [key: number]: number } = {};
+      periodOrders.forEach(o => {
+        const day = new Date(o.date).getDate();
+        revenueByDate[day] = (revenueByDate[day] || 0) + (o.total ?? 0);
+      });
+      chartData = Array.from({ length: daysInMonth }, (_, i) => ({
+        name: String(i + 1), revenue: revenueByDate[i + 1] || 0
+      }));
+    } else {
+      const revenueByMonth: { [key: number]: number } = {};
+      periodOrders.forEach(o => {
+        const month = new Date(o.date).getMonth();
+        revenueByMonth[month] = (revenueByMonth[month] || 0) + (o.total ?? 0);
+      });
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      chartData = months.map((name, i) => ({ name, revenue: revenueByMonth[i] || 0 }));
+    }
+
     const catData = CATEGORIES.filter(c => c.id !== 'all').map(cat => ({
       name: cat.label, value: products.filter(p => p.category === cat.id).length
     }));
-    const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
-    return { revenue: totalRevenue, orders: orders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, avgOrderValue, chartData, catData };
-  }, [products, orders, users]);
+
+    return { revenue: totalRevenue, orders: periodOrders.length, products: products.length, customers: users.length, lowStock: lowStockCount, pending: pendingOrders, avgOrderValue, chartData, catData };
+  }, [products, orders, users, statPeriod]);
 
   // ── Tab group helper ─────────────────────────────────────────────
   const isOverview  = ['dashboard', 'analytics'].includes(activeTab);
