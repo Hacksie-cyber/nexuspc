@@ -275,7 +275,8 @@ export const CatalogTab = React.memo(function CatalogTab({ activeTab, products, 
                   </form>
                 </div>
               </motion.div>
-            )}
+            </div>
+          )}
           </AnimatePresence>
 
           <AnimatePresence mode="wait">
