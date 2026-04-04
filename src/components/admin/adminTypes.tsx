@@ -71,7 +71,7 @@ export const CUSTOMERS = [
   { name: 'Maria Cruz', email: 'maria@email.com', orders: 1, spent: 9500, joined: '2024-12-01', status: 'Active' },
 ];
 
-export const fmt = (n: number) => '₱' + n.toLocaleString();
+export const fmt = (n: number) => '₱' + (n ?? 0).toLocaleString();
 
 // ── Shared UI Components ─────────────────────────────────────────────────────
 
