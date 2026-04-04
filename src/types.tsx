@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
             <p className="text-gray-500 mb-8 text-sm leading-relaxed">{errorMsg}</p>
             <button
               onClick={() => window.location.reload()}
-              className="w-full bg-green-400 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20"
+              className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20"
             >
               Reload Application
             </button>
