@@ -54,6 +54,35 @@ export const CatalogTab = React.memo(function CatalogTab({ activeTab, products, 
     }
   };
 
+  const handleExportInventory = () => {
+    const rows = [
+      ['SKU', 'Name', 'Category', 'Brand', 'Stock', 'Status'],
+      ...products.map(p => [
+        `NPC-${p.category.toUpperCase().slice(0, 3)}-${p.id.toString().padStart(4, '0')}`,
+        p.name, p.category, p.brand, p.stock.toString(),
+        p.stock === 0 ? 'Out of Stock' : p.stock <= 5 ? 'Low Stock' : 'In Stock'
+      ])
+    ];
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'inventory.csv'; a.click();
+    URL.revokeObjectURL(url);
+    showToast('Inventory exported');
+  };
+
+  const handleUpdateStock = async (id: number, newStock: number) => {
+    if (newStock < 0) return;
+    try {
+      await updateDoc(doc(db, 'products', id.toString()), { stock: newStock });
+      showToast('Stock updated');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `products/${id}`);
+      showToast('Failed to update stock', 'error');
+    }
+  };
+
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
