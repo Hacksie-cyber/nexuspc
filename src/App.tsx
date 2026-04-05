@@ -12,7 +12,7 @@ import {
   onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User, updateProfile
 } from 'firebase/auth';
 import {
-  collection, onSnapshot, query, addDoc, setDoc, doc,
+  collection, onSnapshot, query, addDoc, setDoc, doc, getDoc,
   serverTimestamp, where, updateDoc, writeBatch, increment
 } from 'firebase/firestore';
 import { CartItem, BuildState } from './types';
@@ -82,6 +82,7 @@ export default function App() {
   const [proofUploading, setProofUploading] = useState(false);
   const [proofSubmitted, setProofSubmitted] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [savedDeliveryAddress, setSavedDeliveryAddress] = useState('');
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState('');
@@ -96,18 +97,34 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setIsAuthReady(true);
       if (u) {
-        // Create user profile if not exists
         const userRef = doc(db, 'users', u.uid);
-        setDoc(userRef, {
+        await setDoc(userRef, {
           name: u.displayName || 'Anonymous',
           email: u.email,
           role: u.email === 'bamuyahacksie@gmail.com' ? 'admin' : 'client',
           joined: new Date().toISOString()
         }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'users'));
+
+        // Load saved delivery address
+        try {
+          const userSnap = await getDoc(userRef);
+          const saved = userSnap.data()?.deliveryAddress || '';
+          if (saved) {
+            setSavedDeliveryAddress(saved);
+            setDeliveryAddress(saved);
+          }
+        } catch (err) {
+          console.error('Failed to load saved address', err);
+        }
+      } else {
+        // Clear saved address on logout
+        setSavedDeliveryAddress('');
+        setDeliveryAddress('');
+        setDeliveryCoords(null);
       }
     });
     return unsubscribe;
@@ -317,6 +334,16 @@ export default function App() {
 
       // Commit both atomically
       await batch.commit();
+
+      // Save delivery address to user profile for next time
+      if (user && deliveryAddress.trim()) {
+        try {
+          await updateDoc(doc(db, 'users', user.uid), { deliveryAddress: deliveryAddress.trim() });
+          setSavedDeliveryAddress(deliveryAddress.trim());
+        } catch (err) {
+          console.error('Failed to save address to profile', err);
+        }
+      }
 
       setIsCartOpen(false);
       if (paymentMethod === 'Cash on Delivery') {
@@ -675,189 +702,213 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {cart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-4">
-                    <ShoppingCart className="w-16 h-16 opacity-20" />
-                    <p className="font-medium">Your cart is empty</p>
-                    <button 
-                      onClick={() => { setIsCartOpen(false); navigate('shop'); }}
-                      className="text-green-600 font-bold text-sm hover:underline"
-                    >
-                      Browse Products
-                    </button>
-                  </div>
-                ) : (
-                  cart.map(item => {
-                    const liveProduct = products.find(p => p.id === item.id);
-                    const availableStock = liveProduct?.stock ?? item.stock;
-                    const isOutOfStock = availableStock <= 0;
-                    const isLowStock = availableStock > 0 && availableStock < item.qty;
-                    return (
-                    <div key={item.id} className={`flex gap-4 group rounded-xl p-2 -mx-2 transition-colors ${isOutOfStock ? 'bg-red-50' : isLowStock ? 'bg-orange-50' : ''}`}>
-                      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200 relative">
-                        <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
-                        {isOutOfStock && (
-                          <div className="absolute inset-0 bg-red-500/70 flex items-center justify-center">
-                            <span className="text-white text-[9px] font-black uppercase tracking-widest text-center leading-tight px-1">Out of Stock</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-sm leading-tight mb-0.5 truncate">{item.name}</h3>
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{item.category}</p>
-                        {isOutOfStock && (
-                          <p className="text-[10px] text-red-500 font-bold mb-1">❌ No longer available — please remove</p>
-                        )}
-                        {isLowStock && (
-                          <p className="text-[10px] text-orange-500 font-bold mb-1">⚠️ Only {availableStock} left — qty adjusted</p>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <div className={`flex items-center gap-3 rounded-md px-2 py-1 ${isOutOfStock ? 'bg-red-100' : 'bg-gray-100'}`}>
-                            <button onClick={() => updateQty(item.id, -1)} className="text-gray-500 hover:text-black">
-                              <X className="w-3 h-3" />
-                            </button>
-                            <span className="text-xs font-bold w-4 text-center">{item.qty}</span>
-                            <button
-                              onClick={() => updateQty(item.id, 1)}
-                              disabled={item.qty >= availableStock}
-                              className="text-gray-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <Zap className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-bold text-red-600">₱{(item.price * item.qty).toLocaleString()}</div>
-                            <button 
-                              onClick={() => removeFromCart(item.id)}
-                              className="text-[10px] text-gray-400 hover:text-red-500 uppercase font-bold tracking-widest"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })
-                )}
-              </div>
+              {/* ── Scrollable area: items + checkout form ── */}
+              <div className="flex-1 overflow-y-auto">
 
-              {cart.length > 0 && (
-                <div className="p-6 border-t bg-gray-50">
-                  {/* Order Summary Breakdown */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
-                      <span className="text-base font-bold text-gray-800">₱{cartTotal.toLocaleString()}</span>
-                    </div>
-
-                    {qualifiesForFreeShipping ? (
-                      <div className="flex justify-between items-center">
-                        <span className="text-green-600 font-bold text-xs uppercase tracking-widest">🎉 Shipping Discount</span>
-                        <span className="text-green-600 font-bold text-sm">-₱{SHIPPING_FEE.toLocaleString()}</span>
-                      </div>
-                    ) : (
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Shipping Fee</span>
-                          <p className="text-[10px] text-orange-500 font-medium mt-0.5">
-                            Add ₱{(FREE_SHIPPING_THRESHOLD - cartTotal).toLocaleString()} more for free shipping
-                          </p>
-                        </div>
-                        <span className="text-base font-bold text-gray-800">₱{SHIPPING_FEE.toLocaleString()}</span>
-                      </div>
-                    )}
-
-                    <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
-                      <span className="text-gray-700 font-bold text-xs uppercase tracking-widest">Total</span>
-                      <span className="text-2xl font-bold text-red-600">₱{orderTotal.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Delivery Address <span className="text-red-400">*</span></p>
-                    </div>
-
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        placeholder="Type your delivery address..."
-                        value={deliveryAddress}
-                        onChange={e => { setDeliveryAddress(e.target.value); setLocError(''); }}
-                        className={`flex-1 bg-gray-50 border rounded-xl px-3 py-2.5 text-[11px] focus:outline-none transition-all ${deliveryAddress.trim() ? 'border-green-400 bg-green-50/30' : 'border-gray-200 focus:border-green-500'}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={detectLocation}
-                        disabled={locating}
-                        title="Use my current location"
-                        className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-[10px] font-bold hover:bg-green-100 transition-all disabled:opacity-50"
+                {/* Cart Items */}
+                <div className="p-6 space-y-6">
+                  {cart.length === 0 ? (
+                    <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
+                      <ShoppingCart className="w-16 h-16 opacity-20" />
+                      <p className="font-medium">Your cart is empty</p>
+                      <button 
+                        onClick={() => { setIsCartOpen(false); navigate('shop'); }}
+                        className="text-green-600 font-bold text-sm hover:underline"
                       >
-                        {locating ? <span className="animate-spin text-sm">⏳</span> : <MapPin className="w-3.5 h-3.5" />}
+                        Browse Products
                       </button>
                     </div>
-
-                    {locError && <p className="text-[10px] text-red-500 mb-1">{locError}</p>}
-
-                    {deliveryAddress.trim() && !locError && (
-                      <p className="text-[10px] text-green-600 truncate mb-1">✅ {deliveryAddress}</p>
-                    )}
-
-                    {deliveryCoords && (
-                      <div className="rounded-xl overflow-hidden border border-gray-200 h-24 w-full mt-1">
-                        <iframe
-                          title="Delivery Location"
-                          width="100%"
-                          height="100%"
-                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${deliveryCoords.lng - 0.003},${deliveryCoords.lat - 0.003},${deliveryCoords.lng + 0.003},${deliveryCoords.lat + 0.003}&layer=mapnik&marker=${deliveryCoords.lat},${deliveryCoords.lng}`}
-                          style={{ border: 0, pointerEvents: 'none' }}
-                        />
+                  ) : (
+                    cart.map(item => {
+                      const liveProduct = products.find(p => p.id === item.id);
+                      const availableStock = liveProduct?.stock ?? item.stock;
+                      const isOutOfStock = availableStock <= 0;
+                      const isLowStock = availableStock > 0 && availableStock < item.qty;
+                      return (
+                      <div key={item.id} className={`flex gap-4 group rounded-xl p-2 -mx-2 transition-colors ${isOutOfStock ? 'bg-red-50' : isLowStock ? 'bg-orange-50' : ''}`}>
+                        <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-gray-200 relative">
+                          <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                          {isOutOfStock && (
+                            <div className="absolute inset-0 bg-red-500/70 flex items-center justify-center">
+                              <span className="text-white text-[9px] font-black uppercase tracking-widest text-center leading-tight px-1">Out of Stock</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-sm leading-tight mb-0.5 truncate">{item.name}</h3>
+                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{item.category}</p>
+                          {isOutOfStock && (
+                            <p className="text-[10px] text-red-500 font-bold mb-1">❌ No longer available — please remove</p>
+                          )}
+                          {isLowStock && (
+                            <p className="text-[10px] text-orange-500 font-bold mb-1">⚠️ Only {availableStock} left — qty adjusted</p>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <div className={`flex items-center gap-3 rounded-md px-2 py-1 ${isOutOfStock ? 'bg-red-100' : 'bg-gray-100'}`}>
+                              <button onClick={() => updateQty(item.id, -1)} className="text-gray-500 hover:text-black">
+                                <X className="w-3 h-3" />
+                              </button>
+                              <span className="text-xs font-bold w-4 text-center">{item.qty}</span>
+                              <button
+                                onClick={() => updateQty(item.id, 1)}
+                                disabled={item.qty >= availableStock}
+                                className="text-gray-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <Zap className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-bold text-red-600">₱{(item.price * item.qty).toLocaleString()}</div>
+                              <button 
+                                onClick={() => removeFromCart(item.id)}
+                                className="text-[10px] text-gray-400 hover:text-red-500 uppercase font-bold tracking-widest"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="mb-5">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { id: 'GCash', label: 'GCash', icon: '📱' },
-                        { id: 'Cash on Delivery', label: 'Cash on Delivery', icon: '🚚' },
-                        { id: 'Bank Transfer', label: 'Bank Transfer', icon: '🏦' },
-                      ] as const).map(opt => (
-                        <button
-                          key={opt.id}
-                          onClick={() => setPaymentMethod(opt.id)}
-                          className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${
-                            paymentMethod === opt.id
-                              ? 'border-green-500 bg-green-50 text-green-700'
-                              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="text-xl">{opt.icon}</span>
-                          <span className="text-[10px] font-bold leading-tight">{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                    {paymentMethod === 'GCash' && (
-                      <p className="text-[10px] text-gray-400 mt-2 pl-1">You'll receive a GCash payment request after checkout.</p>
-                    )}
-                    {paymentMethod === 'Cash on Delivery' && (
-                      <p className="text-[10px] text-gray-400 mt-2 pl-1">Pay when your order arrives at your door.</p>
-                    )}
-                    {paymentMethod === 'Bank Transfer' && (
-                      <p className="text-[10px] text-gray-400 mt-2 pl-1">Bank details will be sent to your email after checkout.</p>
-                    )}
-                  </div>
-                  <button 
-                    onClick={handleCheckout}
-                    disabled={!deliveryAddress.trim()}
-                    className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {!deliveryAddress.trim() ? '📍 Add Delivery Address First' : 'Checkout Now'}
-                  </button>
+                      );
+                    })
+                  )}
                 </div>
-              )}
+
+                {/* Checkout Panel — below items, scrolls with them */}
+                {cart.length > 0 && (
+                  <div className="px-6 pb-8 pt-2 border-t bg-gray-50 space-y-5">
+
+                    {/* Order Summary */}
+                    <div className="space-y-2 pt-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Order Summary</p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Subtotal</span>
+                        <span className="text-base font-bold text-gray-800">₱{cartTotal.toLocaleString()}</span>
+                      </div>
+
+                      {qualifiesForFreeShipping ? (
+                        <div className="flex justify-between items-center">
+                          <span className="text-green-600 font-bold text-xs uppercase tracking-widest">🎉 Shipping Discount</span>
+                          <span className="text-green-600 font-bold text-sm">-₱{SHIPPING_FEE.toLocaleString()}</span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Shipping Fee</span>
+                            <p className="text-[10px] text-orange-500 font-medium mt-0.5">
+                              Add ₱{(FREE_SHIPPING_THRESHOLD - cartTotal).toLocaleString()} more for free shipping
+                            </p>
+                          </div>
+                          <span className="text-base font-bold text-gray-800">₱{SHIPPING_FEE.toLocaleString()}</span>
+                        </div>
+                      )}
+
+                      <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+                        <span className="text-gray-700 font-bold text-xs uppercase tracking-widest">Total</span>
+                        <span className="text-2xl font-bold text-red-600">₱{orderTotal.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Delivery Address */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Delivery Address <span className="text-red-400">*</span></p>
+                        {savedDeliveryAddress && deliveryAddress.trim() !== savedDeliveryAddress && (
+                          <button
+                            onClick={() => { setDeliveryAddress(savedDeliveryAddress); setDeliveryCoords(null); setLocError(''); }}
+                            className="text-[10px] font-bold text-green-600 hover:text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full transition-colors"
+                          >
+                            ↩ Use saved address
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          placeholder="Type your delivery address..."
+                          value={deliveryAddress}
+                          onChange={e => { setDeliveryAddress(e.target.value); setLocError(''); }}
+                          className={`flex-1 bg-white border rounded-xl px-3 py-2.5 text-[11px] focus:outline-none transition-all ${deliveryAddress.trim() ? 'border-green-400 bg-green-50/30' : 'border-gray-200 focus:border-green-500'}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={detectLocation}
+                          disabled={locating}
+                          title="Use my current location"
+                          className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-[10px] font-bold hover:bg-green-100 transition-all disabled:opacity-50"
+                        >
+                          {locating ? <span className="animate-spin text-sm">⏳</span> : <MapPin className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+
+                      {locError && <p className="text-[10px] text-red-500 mb-1">{locError}</p>}
+
+                      {deliveryAddress.trim() && !locError && (
+                        <p className="text-[10px] text-green-600 truncate mb-1">
+                          {deliveryAddress.trim() === savedDeliveryAddress ? '📍 Saved address' : '✅ New address'}: {deliveryAddress}
+                        </p>
+                      )}
+
+                      {deliveryCoords && (
+                        <div className="rounded-xl overflow-hidden border border-gray-200 h-24 w-full mt-1">
+                          <iframe
+                            title="Delivery Location"
+                            width="100%"
+                            height="100%"
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${deliveryCoords.lng - 0.003},${deliveryCoords.lat - 0.003},${deliveryCoords.lng + 0.003},${deliveryCoords.lat + 0.003}&layer=mapnik&marker=${deliveryCoords.lat},${deliveryCoords.lng}`}
+                            style={{ border: 0, pointerEvents: 'none' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Payment Method */}
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Payment Method</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { id: 'GCash', label: 'GCash', icon: '📱' },
+                          { id: 'Cash on Delivery', label: 'Cash on Delivery', icon: '🚚' },
+                          { id: 'Bank Transfer', label: 'Bank Transfer', icon: '🏦' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => setPaymentMethod(opt.id)}
+                            className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${
+                              paymentMethod === opt.id
+                                ? 'border-green-500 bg-green-50 text-green-700'
+                                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                            }`}
+                          >
+                            <span className="text-xl">{opt.icon}</span>
+                            <span className="text-[10px] font-bold leading-tight">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {paymentMethod === 'GCash' && (
+                        <p className="text-[10px] text-gray-400 mt-2 pl-1">You'll receive a GCash payment request after checkout.</p>
+                      )}
+                      {paymentMethod === 'Cash on Delivery' && (
+                        <p className="text-[10px] text-gray-400 mt-2 pl-1">Pay when your order arrives at your door.</p>
+                      )}
+                      {paymentMethod === 'Bank Transfer' && (
+                        <p className="text-[10px] text-gray-400 mt-2 pl-1">Bank details will be sent to your email after checkout.</p>
+                      )}
+                    </div>
+
+                    {/* Checkout Button */}
+                    <button 
+                      onClick={handleCheckout}
+                      disabled={!deliveryAddress.trim()}
+                      className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {!deliveryAddress.trim() ? '📍 Add Delivery Address First' : 'Checkout Now'}
+                    </button>
+                  </div>
+                )}
+
+              </div>{/* end scrollable area */}
             </motion.div>
           </>
         )}
