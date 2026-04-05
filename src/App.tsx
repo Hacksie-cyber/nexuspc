@@ -81,6 +81,7 @@ export default function App() {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
   const [proofSubmitted, setProofSubmitted] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [savedDeliveryAddress, setSavedDeliveryAddress] = useState('');
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -275,6 +276,7 @@ export default function App() {
   const handleCheckout = async () => {
     if (!user) { login(); return; }
     if (cart.length === 0) return;
+    if (isCheckingOut) return;
     if (!deliveryAddress.trim()) {
       showToast('Please enter your delivery address.', 'error');
       return;
@@ -283,7 +285,7 @@ export default function App() {
     // Check stock against latest product data from Firestore
     const outOfStock = cart.filter(item => {
       const liveProduct = products.find(p => p.id === item.id);
-      return !liveProduct || liveProduct.stock < item.qty;
+      return liveProduct && liveProduct.stock < item.qty;
     });
     if (outOfStock.length > 0) {
       const names = outOfStock.map(i => {
@@ -295,6 +297,8 @@ export default function App() {
       showToast(`Stock issue: ${names}. Please update your cart.`, 'error');
       return;
     }
+
+    setIsCheckingOut(true);
 
     const orderData = {
       uid: user.uid,
@@ -335,14 +339,11 @@ export default function App() {
       // Commit both atomically
       await batch.commit();
 
-      // Save delivery address to user profile for next time
+      // Save delivery address to user profile for next time (non-blocking)
       if (user && deliveryAddress.trim()) {
-        try {
-          await updateDoc(doc(db, 'users', user.uid), { deliveryAddress: deliveryAddress.trim() });
-          setSavedDeliveryAddress(deliveryAddress.trim());
-        } catch (err) {
-          console.error('Failed to save address to profile', err);
-        }
+        updateDoc(doc(db, 'users', user.uid), { deliveryAddress: deliveryAddress.trim() })
+          .then(() => setSavedDeliveryAddress(deliveryAddress.trim()))
+          .catch(err => console.error('Failed to save address to profile', err));
       }
 
       setIsCartOpen(false);
@@ -354,9 +355,12 @@ export default function App() {
         setProofSubmitted(false);
         setPaymentModal({ orderId: orderRef.id, method: paymentMethod, total: orderTotal });
       }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'orders');
-      showToast('Failed to place order. Please try again.', 'error');
+    } catch (err: any) {
+      console.error('Checkout error:', err);
+      const msg = err?.message || 'Failed to place order. Please try again.';
+      showToast(msg, 'error');
+    } finally {
+      setIsCheckingOut(false);
     }
   };
 
@@ -900,10 +904,15 @@ export default function App() {
                     {/* Checkout Button */}
                     <button 
                       onClick={handleCheckout}
-                      disabled={!deliveryAddress.trim()}
-                      className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!deliveryAddress.trim() || isCheckingOut}
+                      className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      {!deliveryAddress.trim() ? '📍 Add Delivery Address First' : 'Checkout Now'}
+                      {isCheckingOut ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Processing...
+                        </>
+                      ) : !deliveryAddress.trim() ? '📍 Add Delivery Address First' : 'Checkout Now'}
                     </button>
                   </div>
                 )}
@@ -1088,7 +1097,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3">
+      <div className="fixed bottom-8 right-8 z-[600] flex flex-col gap-3">
         {toasts.map(toast => (
           <motion.div 
             key={toast.id}
