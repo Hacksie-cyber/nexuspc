@@ -162,22 +162,30 @@ export default function App() {
     return unsubscribe;
   }, [user]);
 
-  // Load cart from localStorage
+  // Clear the old shared cart key (migration: was 'nexus_cart', now per-user)
+  useEffect(() => { localStorage.removeItem('nexus_cart'); }, []);
+
+  // Load cart from localStorage — keyed by user so carts never bleed across accounts
   useEffect(() => {
-    const savedCart = localStorage.getItem('nexus_cart');
+    const cartKey = user ? `nexus_cart_${user.uid}` : null;
+    if (!cartKey) { setCart([]); return; }
+    const savedCart = localStorage.getItem(cartKey);
     if (savedCart) {
       try {
         setCart(JSON.parse(savedCart));
       } catch (e) {
         console.error('Failed to parse cart', e);
       }
+    } else {
+      setCart([]); // new user — start with empty cart
     }
-  }, []);
+  }, [user]); // re-runs on login/logout
 
-  // Save cart to localStorage
+  // Save cart to user-specific localStorage key
   useEffect(() => {
-    localStorage.setItem('nexus_cart', JSON.stringify(cart));
-  }, [cart]);
+    if (!user) return; // don't persist while logged out
+    localStorage.setItem(`nexus_cart_${user.uid}`, JSON.stringify(cart));
+  }, [cart, user]);
 
   // Derived State
   const cartCount = cart.reduce((acc, item) => acc + item.qty, 0);
