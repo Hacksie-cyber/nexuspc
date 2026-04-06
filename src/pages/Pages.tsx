@@ -12,6 +12,7 @@ import { db } from '../firebase';
 import { BuildState } from '../types';
 import { ProductCard } from '../components/ProductCard';
 import PCVisualizer from '../components/builder/PCVisualizer';
+import DeliveryRouteMap from '../components/DeliveryRouteMap';
 
 function HomePage({ navigate, addToCart, products, onView }: { navigate: (p: string) => void, addToCart: (p: Product) => void, products: Product[], onView: (p: Product) => void }) {
   // Show sale items first, then fill remaining slots with newest products across all categories
@@ -1109,6 +1110,23 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
                                 <span className={`text-xs font-bold px-2 py-1 rounded ${statusStyle[order.status] || 'bg-gray-100 text-gray-600'}`}>{order.status}</span>
                               </div>
                             </div>
+
+                            {/* Delivery Route Map */}
+                            {order.deliveryLat && order.deliveryLng && (
+                              <div className="mt-6 pt-4 border-t border-dashed">
+                                <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Delivery Route</h4>
+                                {order.deliveryAddress && (
+                                  <p className="text-xs text-gray-500 mb-3">📍 {order.deliveryAddress}</p>
+                                )}
+                                <DeliveryRouteMap
+                                  customerLat={order.deliveryLat}
+                                  customerLng={order.deliveryLng}
+                                  customerAddress={order.deliveryAddress}
+                                  height="h-52"
+                                />
+                              </div>
+                            )}
+
                             {order.status === 'Awaiting Payment' && (
                               <div className="mt-4 p-3 bg-purple-50 border border-purple-100 rounded-xl text-xs text-purple-700 leading-relaxed">
                                 <strong>Payment required.</strong> Please complete your GCash or Bank Transfer payment to proceed with your order.
