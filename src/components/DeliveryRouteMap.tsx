@@ -62,7 +62,12 @@ export default function DeliveryRouteMap({
       }
 
       const L   = (window as any).L;
-      const map = L.map(mapContainerRef.current, { zoomControl: true, attributionControl: true });
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+        scrollWheelZoom: false,  // don't hijack page scroll
+        tap: false,              // prevent touch-scroll capture on mobile
+      });
       mapInstanceRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -178,8 +183,9 @@ export default function DeliveryRouteMap({
         )}
       </div>
 
-      {/* Map container */}
-      <div className={`relative rounded-xl overflow-hidden border border-gray-200 shadow-sm ${height} w-full`}>
+      {/* Map container — isolated stacking context keeps Leaflet panes below the sticky nav (z-[100]) */}
+      <div className={`relative rounded-xl overflow-hidden border border-gray-200 shadow-sm ${height} w-full`}
+           style={{ zIndex: 0, isolation: 'isolate' }}>
         {loading && (
           <div className="absolute inset-0 bg-gray-50 flex flex-col items-center justify-center z-10 gap-2">
             <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
