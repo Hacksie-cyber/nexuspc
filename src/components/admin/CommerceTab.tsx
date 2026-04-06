@@ -213,9 +213,32 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
                                               <div className="font-bold text-gray-900">{fmt(item.price * item.qty)}</div>
                                             </div>
                                           ))}
-                                          <div className="pt-4 border-t border-dashed flex justify-between items-center">
-                                            <span className="text-sm font-bold text-gray-900">Total</span>
-                                            <span className="text-lg font-bold text-green-600">{fmt(order.total)}</span>
+                                          <div className="pt-4 border-t border-dashed space-y-2">
+                                            {(order as any).subtotal != null && (
+                                              <div className="flex justify-between items-center text-sm">
+                                                <span className="text-gray-500">Subtotal</span>
+                                                <span className="font-medium text-gray-900">{fmt((order as any).subtotal)}</span>
+                                              </div>
+                                            )}
+                                            {(order as any).shippingFee != null && (
+                                              <div className="flex justify-between items-center text-sm">
+                                                {(order as any).shippingFee === 0 ? (
+                                                  <>
+                                                    <span className="text-green-600 font-medium flex items-center gap-1">🎉 Shipping Discount</span>
+                                                    <span className="font-medium text-green-600">-₱150</span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <span className="text-gray-500">Shipping Fee</span>
+                                                    <span className="font-medium text-gray-900">{fmt((order as any).shippingFee)}</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                              <span className="text-sm font-bold text-gray-900">Total</span>
+                                              <span className="text-lg font-bold text-green-600">{fmt(order.total)}</span>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
