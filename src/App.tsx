@@ -91,7 +91,6 @@ export default function App() {
   const [builderStep, setBuilderStep] = useState(0);
 
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
-  const [cartSnapshot, setCartSnapshot] = useState<CartItem[]>([]);
 
   const { toasts, showToast } = useToast();
   const { cart, cartCount, addToCart, removeFromCart, updateQty, clearCart } = useCart(user);
@@ -207,9 +206,8 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  const handleCheckoutDone = (orderId: string, method: string, total: number) => {
-    setCartSnapshot([...cart]);
-    setPaymentInfo({ orderId, method, total });
+  const handleCheckoutDone = (pendingOrder: Record<string, any>, cartSnapshot: CartItem[]) => {
+    setPaymentInfo({ pendingOrder, cartSnapshot });
   };
 
   if (page === 'admin') return <AdminDashboard onExit={() => navigate('home')} />;
@@ -383,7 +381,6 @@ export default function App() {
         {/* Payment Modal — independent component */}
         <PaymentModal
           payment={paymentInfo}
-          cartSnapshot={cartSnapshot}
           onClose={() => setPaymentInfo(null)}
           onOpenCart={() => setIsCartOpen(true)}
           onClearCart={clearCart}
