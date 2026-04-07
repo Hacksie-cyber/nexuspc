@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, ChevronRight, CheckCircle2, X, Clock, Users } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch, increment } from 'firebase/firestore';
 import { StatusBadge, fmt, Order, Booking, CUSTOMERS } from './adminTypes';
 import DeliveryRouteMap from '../DeliveryRouteMap';
 
@@ -30,9 +30,25 @@ export function CommerceTab({ activeTab, orders, bookings, users, showToast }: C
   const [customersVisible, setCustomersVisible] = useState(10);
 
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
+    // Restore stock atomically when cancelling or marking return & rejected
+    const shouldRestoreStock = status === 'Cancelled' || status === 'Return & Rejected';
     try {
-      await updateDoc(doc(db, 'orders', id), { status });
-      showToast(`Order ${id} updated to ${status}`);
+      if (shouldRestoreStock) {
+        const order = orders.find(o => o.id === id);
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'orders', id), { status });
+        if (order?.cartItems?.length) {
+          order.cartItems.forEach((item: any) => {
+            batch.update(doc(db, 'products', item.id.toString()), {
+              stock: increment(item.qty),
+            });
+          });
+        }
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, 'orders', id), { status });
+      }
+      showToast(`Order updated to ${status}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `orders/${id}`);
     }
