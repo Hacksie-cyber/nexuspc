@@ -30,8 +30,8 @@ interface CartSidebarProps {
   onRemoveFromCart: (id: number) => void;
   onClearCart: () => void;
   onLogin: () => void;
-  /** Called after a successful non-COD checkout — parent opens PaymentModal */
-  onCheckoutDone: (orderId: string, method: string, total: number) => void;
+  /** Called after a successful non-COD checkout — passes pending order data, no Firestore write yet */
+  onCheckoutDone: (pendingOrder: Record<string, any>, cartSnapshot: CartItem[]) => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   onNavigate: (page: string) => void;
 }
@@ -134,7 +134,6 @@ export default function CartSidebar({
       payment: paymentMethod,
       status: paymentMethod === 'Cash on Delivery' ? 'Processing' : 'Awaiting Payment',
       date: new Date().toISOString(),
-      createdAt: serverTimestamp(),
       deliveryAddress: effectiveAddress.trim(),
       deliveryLat: deliveryCoords?.lat ?? null,
       deliveryLng: deliveryCoords?.lng ?? null,
@@ -143,33 +142,46 @@ export default function CartSidebar({
 
     try {
       const batch = writeBatch(db);
-      const orderRef = doc(collection(db, 'orders'));
-      batch.set(orderRef, orderData);
-      cart.forEach(item => {
-        batch.update(doc(db, 'products', item.id.toString()), {
-          stock: increment(-item.qty),
-        });
-      });
-      await batch.commit();
-
-      // Persist address + coords non-blocking
-      const coordsToSave = deliveryCoords
-        ? { deliveryAddress: effectiveAddress.trim(), deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng }
-        : { deliveryAddress: effectiveAddress.trim() };
-      updateDoc(doc(db, 'users', user.uid), coordsToSave)
-        .then(() => {
-          onAddressSaved(effectiveAddress.trim());
-          if (deliveryCoords) onCoordsSaved(deliveryCoords);
-        })
-        .catch(err => console.error('Failed to save address:', err));
-
-      onClose();
 
       if (paymentMethod === 'Cash on Delivery') {
+        // COD: create order doc + deduct stock atomically right now
+        const orderRef = doc(collection(db, 'orders'));
+        batch.set(orderRef, { ...orderData, createdAt: serverTimestamp() });
+        cart.forEach(item => {
+          batch.update(doc(db, 'products', item.id.toString()), { stock: increment(-item.qty) });
+        });
+        await batch.commit();
+
+        // Persist address + coords
+        const coordsToSave = deliveryCoords
+          ? { deliveryAddress: effectiveAddress.trim(), deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng }
+          : { deliveryAddress: effectiveAddress.trim() };
+        updateDoc(doc(db, 'users', user.uid), coordsToSave)
+          .then(() => { onAddressSaved(effectiveAddress.trim()); if (deliveryCoords) onCoordsSaved(deliveryCoords); })
+          .catch(err => console.error('Failed to save address:', err));
+
+        onClose();
         onClearCart();
         showToast('Order placed! Pay when your order arrives.');
       } else {
-        onCheckoutDone(orderRef.id, paymentMethod, orderTotal);
+        // GCash / Bank Transfer: deduct stock only — order doc is created AFTER proof is uploaded
+        cart.forEach(item => {
+          batch.update(doc(db, 'products', item.id.toString()), { stock: increment(-item.qty) });
+        });
+        await batch.commit();
+
+        // Persist address + coords
+        const coordsToSave = deliveryCoords
+          ? { deliveryAddress: effectiveAddress.trim(), deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng }
+          : { deliveryAddress: effectiveAddress.trim() };
+        updateDoc(doc(db, 'users', user.uid), coordsToSave)
+          .then(() => { onAddressSaved(effectiveAddress.trim()); if (deliveryCoords) onCoordsSaved(deliveryCoords); })
+          .catch(err => console.error('Failed to save address:', err));
+
+        // Generate a temp reference ID the user can quote in their transfer
+        const tempRef = Date.now().toString(36).toUpperCase().slice(-8);
+        onClose();
+        onCheckoutDone({ ...orderData, tempRef }, [...cart]);
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
