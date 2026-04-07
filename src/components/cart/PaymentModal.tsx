@@ -1,22 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronRight, CheckCircle2 } from 'lucide-react';
-import { doc, updateDoc, writeBatch, increment } from 'firebase/firestore';
+import { collection, doc, writeBatch, increment, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { CartItem } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface PaymentInfo {
-  orderId: string;
-  method: string;
-  total: number;
+  /** Full order data — written to Firestore only when proof is submitted */
+  pendingOrder: Record<string, any>;
+  /** Cart snapshot for stock restore if the user cancels */
+  cartSnapshot: CartItem[];
 }
 
 interface PaymentModalProps {
-  /** null = closed */
   payment: PaymentInfo | null;
-  /** Cart snapshot at checkout time — used to restore stock on cancel */
-  cartSnapshot: CartItem[];
   onClose: () => void;
   onOpenCart: () => void;
   onClearCart: () => void;
@@ -25,62 +23,74 @@ interface PaymentModalProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function PaymentModal({
-  payment, cartSnapshot, onClose, onOpenCart, onClearCart, showToast,
+  payment, onClose, onOpenCart, onClearCart, showToast,
 }: PaymentModalProps) {
 
-  // All proof-upload state lives here — resets whenever a new payment opens
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Reset state whenever a new payment session opens
   useEffect(() => {
     if (payment) {
       setProofFile(null);
       setUploading(false);
       setSubmitted(false);
     }
-  }, [payment?.orderId]);
+  }, [payment?.pendingOrder?.tempRef]);
 
-  // ── Cancel order & restore stock ─────────────────────────────────────────
+  const method   = payment?.pendingOrder?.payment ?? '';
+  const total    = payment?.pendingOrder?.total   ?? 0;
+  const tempRef  = payment?.pendingOrder?.tempRef ?? '';
+
+  // ── Cancel — restore stock only (no order doc was created yet) ────────────
   const handleCancel = async () => {
     if (!payment) return;
     try {
       const batch = writeBatch(db);
-      batch.update(doc(db, 'orders', payment.orderId), { status: 'Cancelled' });
-      cartSnapshot.forEach(item => {
+      payment.cartSnapshot.forEach(item => {
         batch.update(doc(db, 'products', item.id.toString()), {
           stock: increment(item.qty),
         });
       });
       await batch.commit();
     } catch (err) {
-      console.error('Failed to cancel order:', err);
+      console.error('Failed to restore stock on cancel:', err);
     }
     onClose();
     onOpenCart();
   };
 
-  // ── Submit proof ──────────────────────────────────────────────────────────
+  // ── Submit proof — creates order doc for the first time ───────────────────
   const handleProofSubmit = async () => {
     if (!proofFile || !payment || uploading) return;
     setUploading(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        await updateDoc(doc(db, 'orders', payment.orderId), {
-          proofOfPayment: base64,
-          status: 'Payment Submitted',
-        });
-        setSubmitted(true);
-        setUploading(false);
-        onClearCart();
-        showToast('Payment proof submitted! We will verify shortly.');
+        try {
+          const base64 = reader.result as string;
+          const orderRef = doc(collection(db, 'orders'));
+          await setDoc(orderRef, {
+            ...payment.pendingOrder,
+            proofOfPayment: base64,
+            status: 'Payment Submitted',
+            createdAt: serverTimestamp(),
+          });
+          setSubmitted(true);
+          onClearCart();
+          showToast('Order placed! We will verify your payment shortly.');
+        } catch (err) {
+          console.error('Failed to submit proof:', err);
+          showToast('Failed to submit proof. Please try again.', 'error');
+        } finally {
+          setUploading(false);
+        }
       };
       reader.readAsDataURL(proofFile);
     } catch {
       setUploading(false);
-      showToast('Failed to upload proof. Please try again.', 'error');
+      showToast('Failed to read file. Please try again.', 'error');
     }
   };
 
@@ -116,7 +126,7 @@ export default function PaymentModal({
                     Complete Your Order
                   </p>
                   <h3 className="text-white font-black text-lg tracking-tight">
-                    {payment.method} Payment
+                    {method} Payment
                   </h3>
                 </div>
               </div>
@@ -137,9 +147,9 @@ export default function PaymentModal({
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8 text-green-600" />
                   </div>
-                  <h4 className="text-xl font-black tracking-tight mb-2">Payment Proof Submitted!</h4>
+                  <h4 className="text-xl font-black tracking-tight mb-2">Order Placed!</h4>
                   <p className="text-gray-400 text-sm leading-relaxed mb-6">
-                    We've received your proof of payment. Our team will verify and confirm your order shortly.
+                    Your payment proof has been received. Our team will verify and confirm your order shortly.
                   </p>
                   <button
                     onClick={onClose}
@@ -150,19 +160,24 @@ export default function PaymentModal({
                 </motion.div>
               ) : (
                 <div className="space-y-6">
-                  {/* Amount */}
-                  <div className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-100">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
-                      Amount to Pay
-                    </p>
-                    <p className="text-3xl font-black text-red-600">₱{payment.total.toLocaleString()}</p>
-                    <p className="text-[10px] text-gray-400 mt-1 font-mono">
-                      Order #{payment.orderId.slice(-8).toUpperCase()}
+
+                  {/* Notice — order is pending until proof is uploaded */}
+                  <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                    <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
+                      Your order will only be registered once you upload your proof of payment below.
                     </p>
                   </div>
 
+                  {/* Amount */}
+                  <div className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-100">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Amount to Pay</p>
+                    <p className="text-3xl font-black text-red-600">₱{total.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 font-mono">Ref: #{tempRef}</p>
+                  </div>
+
                   {/* GCash Details */}
-                  {payment.method === 'GCash' && (
+                  {method === 'GCash' && (
                     <div className="space-y-3">
                       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 text-center">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">
@@ -182,16 +197,12 @@ export default function PaymentModal({
                             />
                           </div>
                         </div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">
-                          Or send to this number
-                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">Or send to this number</p>
                         <p className="text-2xl font-black text-blue-700 tracking-widest mb-1">0917 123 4567</p>
                         <p className="text-sm font-bold text-blue-600">NEXUS PC Store</p>
                         <div className="mt-4 pt-4 border-t border-blue-100">
-                          <p className="text-[10px] text-blue-400 font-medium">Use your Order ID as reference:</p>
-                          <p className="text-sm font-black text-blue-700 font-mono mt-1">
-                            #{payment.orderId.slice(-8).toUpperCase()}
-                          </p>
+                          <p className="text-[10px] text-blue-400 font-medium">Use this reference in your GCash note:</p>
+                          <p className="text-sm font-black text-blue-700 font-mono mt-1">#{tempRef}</p>
                         </div>
                       </div>
                       <p className="text-xs text-gray-400 text-center">
@@ -201,7 +212,7 @@ export default function PaymentModal({
                   )}
 
                   {/* Bank Transfer Details */}
-                  {payment.method === 'Bank Transfer' && (
+                  {method === 'Bank Transfer' && (
                     <div className="space-y-3">
                       <div className="bg-green-50 border border-green-100 rounded-2xl p-5">
                         <div className="text-center text-3xl mb-3">🏦</div>
@@ -213,7 +224,7 @@ export default function PaymentModal({
                             { label: 'Bank', value: 'BDO Unibank' },
                             { label: 'Account Name', value: 'NEXUS PC Store' },
                             { label: 'Account Number', value: '1234 5678 9012' },
-                            { label: 'Reference', value: `#${payment.orderId.slice(-8).toUpperCase()}` },
+                            { label: 'Reference', value: `#${tempRef}` },
                           ].map((row, i) => (
                             <div key={i} className="flex justify-between items-center py-2 border-b border-green-100 last:border-0">
                               <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{row.label}</span>
@@ -223,7 +234,7 @@ export default function PaymentModal({
                         </div>
                       </div>
                       <p className="text-xs text-gray-400 text-center">
-                        Transfer the exact amount using your Order ID as reference, then upload your receipt below.
+                        Transfer the exact amount using the reference above, then upload your receipt below.
                       </p>
                     </div>
                   )}
@@ -231,7 +242,7 @@ export default function PaymentModal({
                   {/* Upload Proof */}
                   <div className="space-y-3">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                      Upload Proof of Payment
+                      Upload Proof of Payment <span className="text-red-400">*</span>
                     </p>
                     <label
                       className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-all ${
@@ -265,7 +276,7 @@ export default function PaymentModal({
                     disabled={!proofFile || uploading}
                     className="w-full bg-green-600 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                   >
-                    {uploading ? 'Uploading...' : 'Submit Payment Proof'}
+                    {uploading ? 'Placing Order...' : 'Submit Proof & Place Order'}
                   </button>
                 </div>
               )}
