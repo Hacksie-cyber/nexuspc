@@ -24,6 +24,8 @@ interface CartSidebarProps {
   user: User | null;
   savedDeliveryAddress: string;
   onAddressSaved: (addr: string) => void;
+  savedDeliveryCoords: { lat: number; lng: number } | null;
+  onCoordsSaved: (coords: { lat: number; lng: number } | null) => void;
   onUpdateQty: (id: number, delta: number) => void;
   onRemoveFromCart: (id: number) => void;
   onClearCart: () => void;
@@ -38,13 +40,14 @@ interface CartSidebarProps {
 export default function CartSidebar({
   isOpen, onClose, cart, products, user,
   savedDeliveryAddress, onAddressSaved,
+  savedDeliveryCoords, onCoordsSaved,
   onUpdateQty, onRemoveFromCart, onClearCart,
   onLogin, onCheckoutDone, showToast, onNavigate,
 }: CartSidebarProps) {
 
   // Delivery state — owned here, not in App
   const [deliveryAddress, setDeliveryAddress] = useState(savedDeliveryAddress);
-  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(savedDeliveryCoords);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState('');
 
@@ -149,9 +152,15 @@ export default function CartSidebar({
       });
       await batch.commit();
 
-      // Persist address non-blocking
-      updateDoc(doc(db, 'users', user.uid), { deliveryAddress: effectiveAddress.trim() })
-        .then(() => onAddressSaved(effectiveAddress.trim()))
+      // Persist address + coords non-blocking
+      const coordsToSave = deliveryCoords
+        ? { deliveryAddress: effectiveAddress.trim(), deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng }
+        : { deliveryAddress: effectiveAddress.trim() };
+      updateDoc(doc(db, 'users', user.uid), coordsToSave)
+        .then(() => {
+          onAddressSaved(effectiveAddress.trim());
+          if (deliveryCoords) onCoordsSaved(deliveryCoords);
+        })
         .catch(err => console.error('Failed to save address:', err));
 
       onClose();
