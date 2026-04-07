@@ -6,7 +6,7 @@ import {
   ShoppingCart, X, User as UserIcon
 } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, writeBatch, increment } from 'firebase/firestore';
 import { CATEGORIES, Product } from '../data/products';
 import { db } from '../firebase';
 import { BuildState } from '../types';
@@ -861,8 +861,25 @@ function ProfilePage({ user, orders, navigate, logout }: { user: User | null, or
   const handleOrderAction = async (orderId: string, type: 'cancel' | 'refund' | 'reject' | 'received') => {
     setActionLoading(orderId + type);
     const statusMap = { cancel: 'Cancelled', refund: 'Refund Requested', reject: 'Return & Rejected', received: 'Completed' };
+    const newStatus = statusMap[type];
+    // Restore stock atomically when cancelling or rejecting delivery
+    const shouldRestoreStock = type === 'cancel' || type === 'reject';
     try {
-      await updateDoc(doc(db, 'orders', orderId), { status: statusMap[type] });
+      if (shouldRestoreStock) {
+        const order = orders.find((o: any) => o.id === orderId);
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'orders', orderId), { status: newStatus });
+        if (order?.cartItems?.length) {
+          order.cartItems.forEach((item: any) => {
+            batch.update(doc(db, 'products', item.id.toString()), {
+              stock: increment(item.qty),
+            });
+          });
+        }
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+      }
     } catch (err) {
       console.error('Failed to update order:', err);
     } finally {
