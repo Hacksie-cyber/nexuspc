@@ -79,6 +79,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [savedDeliveryAddress, setSavedDeliveryAddress] = useState('');
+  const [savedDeliveryCoords, setSavedDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -110,11 +111,15 @@ export default function App() {
         }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'users'));
         try {
           const snap = await getDoc(userRef);
-          const saved = snap.data()?.deliveryAddress || '';
-          if (saved) setSavedDeliveryAddress(saved);
+          const data = snap.data() || {};
+          if (data.deliveryAddress) setSavedDeliveryAddress(data.deliveryAddress);
+          if (data.deliveryLat && data.deliveryLng) {
+            setSavedDeliveryCoords({ lat: data.deliveryLat, lng: data.deliveryLng });
+          }
         } catch (err) { console.error('Failed to load saved address:', err); }
       } else {
         setSavedDeliveryAddress('');
+        setSavedDeliveryCoords(null);
       }
     });
     return unsubscribe;
@@ -364,6 +369,8 @@ export default function App() {
           user={user}
           savedDeliveryAddress={savedDeliveryAddress}
           onAddressSaved={setSavedDeliveryAddress}
+          savedDeliveryCoords={savedDeliveryCoords}
+          onCoordsSaved={setSavedDeliveryCoords}
           onUpdateQty={handleUpdateQty}
           onRemoveFromCart={removeFromCart}
           onClearCart={clearCart}
